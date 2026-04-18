@@ -9,10 +9,9 @@ token = os.environ['TELEGRAM_TOKEN']
 chat_id = os.environ['TELEGRAM_CHAT_ID']
 GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR/exec"
 
-# 상태 관리를 위한 변수
 last_stock_status = {}
-cycle_count = 0  # 몇 바퀴 돌았는지 카운트
-last_update_id = -1 # 읽은 메시지 번호 기억
+cycle_count = 0
+last_update_id = -1
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -20,11 +19,9 @@ def send_message(text):
     requests.post(url, data=payload)
 
 def check_commands():
-    """텔레그램 메시지를 확인하여 명령어를 처리합니다."""
     global last_update_id, cycle_count
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
-        # 최근 메시지만 가져오기
         params = {'offset': last_update_id + 1, 'timeout': 1}
         response = requests.get(url, params=params).json()
         
@@ -33,15 +30,13 @@ def check_commands():
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"]:
                     user_text = update["message"]["text"]
-                    
                     if user_text == "/상태":
                         msg = (f"🤖 [반다이 봇 상태 보고]\n"
-                               f"✅ 현재 정상 작동 중입니다!\n"
+                               f"✅ 정상 가동 중 (무한 루프)\n"
                                f"🔄 감시 횟수: {cycle_count}회차\n"
                                f"📦 감시 중인 상품: {len(last_stock_status)}개")
                         send_message(msg)
-    except Exception as e:
-        print(f"명령어 확인 중 오류: {e}")
+    except: pass
 
 def scan_category(category_url):
     try:
@@ -49,31 +44,37 @@ def scan_category(category_url):
         response = requests.get(proxy_url, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        items = soup.select('.prod_list > li') or soup.select('.list_common > li')
+        # [수정] 클래스 이름 대신 'gno=' 링크를 가진 모든 li 태그를 타겟팅합니다.
+        items = soup.find_all('li')
         updates = []
         
+        found_count = 0
         for item in items:
-            name_tag = item.select_one('.prod_name') or item.select_one('.goods_name')
-            if not name_tag: continue
+            # 해당 li 안에 상품 상세 링크가 있는지 확인
+            link_tag = item.find('a', href=re.compile(r'gno='))
+            if not link_tag: continue
             
-            p_name = name_tag.get_text(strip=True)
-            link_tag = name_tag.find('a')
+            found_count += 1
+            # 상품명 추출 (태그 내의 텍스트 중 가장 긴 것을 상품명으로 간주)
+            p_name = item.get_text(separator=' ', strip=True)
+            # 불필요한 공백/줄바꿈 정리
+            p_name = ' '.join(p_name.split())
             
-            if link_tag and 'gno=' in link_tag['href']:
-                p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
-                p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}"
-            else:
-                p_id = p_name
-                p_url = "링크 없음"
+            p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
+            p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}" if link_tag['href'].startswith('/') else link_tag['href']
 
-            current_status = "재고있음" if link_tag else "품절"
+            # 주인님의 통찰: 링크(a 태그) 내부에 특정 '품절' 마크가 있는지 확인
+            # (반다이몰은 품절 시 a 태그를 지우거나 특정 클래스를 부여함)
+            is_sold_out = "sold_out" in str(item) or "품절" in item.get_text()
+            current_status = "품절" if is_sold_out else "재고있음"
             
             if p_id in last_stock_status:
                 if last_stock_status[p_id] == "품절" and current_status == "재고있음":
-                    updates.append(f"🚨 [재입고 포착!] {p_name}\n주소: {p_url}")
+                    updates.append(f"🚨 [재입고!] {p_name[:40]}...\n주소: {p_url}")
             
             last_stock_status[p_id] = current_status
             
+        print(f"📊 이 페이지에서 {found_count}개의 상품을 발견했습니다.")
         return updates
     except Exception as e:
         print(f"스캔 오류: {e}")
@@ -84,15 +85,12 @@ if __name__ == "__main__":
         with open("list.txt", "r") as f:
             lines = [line.strip() for line in f.readlines() if line.strip()]
         
-        send_message("⚙️ 실시간 감시 및 명령어 모드가 시작되었습니다.\n'/상태'를 입력하면 현재 상황을 알려드려요!")
+        send_message("🛠️ 시력 교정 완료! 정밀 감시를 다시 시작합니다.")
         
         while True:
-            cycle_count += 1 # 사이클 횟수 증가
-            
+            cycle_count += 1
             for line in lines:
-                # 명령어 확인 (페이지 스캔 사이사이에 확인)
                 check_commands()
-                
                 if '|' in line:
                     raw_url, max_page = line.split('|')
                     max_page = int(max_page)
@@ -105,16 +103,11 @@ if __name__ == "__main__":
                 for p in range(1, max_page + 1):
                     p_url = f"{clean_url}{separator}page={p}"
                     print(f"🔍 {cycle_count}회차 감시 중: {p_url}")
-                    
                     found_updates = scan_category(p_url)
                     for msg in found_updates:
                         send_message(msg)
-                    
                     time.sleep(2)
             
-            # 한 사이클 종료 후 대기 시간에도 명령어 확인
-            for _ in range(10): # 10초 대기하는 동안 1초마다 명령어 확인
+            for _ in range(10):
                 check_commands()
                 time.sleep(1)
-    else:
-        print("⚠️ list.txt 파일이 보이지 않습니다.")
