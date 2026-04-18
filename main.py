@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 들여쓰기 완벽 수정 완료! 엔진 가동!")
+print("🚀 [System] 가로 길이 축소 완료. 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -40,7 +40,10 @@ def restart_myself():
     if not github_pat or not repo_full_name:
         return
     url = f"https://api.telegram.org/repos/{repo_full_name}/dispatches"
-    headers = {"Authorization": f"token {github_pat}", "Accept": "application/vnd.github.v3+json"}
+    headers = {
+        "Authorization": f"token {github_pat}",
+        "Accept": "application/vnd.github.v3+json"
+    }
     data = {"event_type": "restart_bot"}
     try:
         requests.post(url, headers=headers, json=data, timeout=10)
@@ -48,7 +51,9 @@ def restart_myself():
         pass
 
 def clean_product_name(raw_name):
-    clean = re.sub(r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지', '', raw_name)
+    # 긴 정규식을 변수로 분리하여 줄바꿈 방지
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지'
+    clean = re.sub(p, '', raw_name)
     return clean.strip()
 
 def check_commands():
@@ -73,21 +78,24 @@ def check_commands():
         
         if cmd == "/상태":
             if cycle_count == 0:
-                send_message("⏳ 현재 첫 번째 정밀 스캔을 진행 중입니다. 잠시만 기다려주세요!")
+                send_message("⏳ 첫 번째 정밀 스캔 중입니다.")
             else:
                 sum_text = [f"📍 {l}: {c}개" for l, c in category_counts.items()]
-                report = f"📊 [실시간 즉시 보고]\n🔄 현재 {cycle_count}회차 정보\n" + "\n".join(sum_text) + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 마지막 시각: {last_check_time}"
-                send_message(report)
+                # 긴 문자열을 짧게 쪼개서 합침
+                msg1 = f"📊 [실시간 즉시 보고]\n🔄 현재 {cycle_count}회차\n"
+                msg2 = "\n".join(sum_text)
+                msg3 = f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 시간: {last_check_time}"
+                send_message(msg1 + msg2 + msg3)
                 
         elif cmd == "/추적상품확인":
             if not current_tracked_names:
-                send_message("⏳ 데이터 수집 중입니다. 첫 사이클 완료 후 다시 시도해주세요.")
+                send_message("⏳ 데이터 수집 중입니다.")
             else:
                 names = sorted(current_tracked_names.values())
                 send_message(f"📂 현재 전체 목록 (총 {len(names)}개)")
                 for i in range(0, len(names), 30):
                     chunk = names[i:i+30]
-                    msg = "\n".join([f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)])
+                    msg = "\n".join([f"{i+idx+1}. {n}" for idx, n in enumerate(chunk)])
                     send_message(f"📋 [목록 {i//30 + 1}]\n{msg}")
 
 def scan_target_parallel(task):
@@ -95,4 +103,91 @@ def scan_target_parallel(task):
     label = task['label']
     try:
         encoded_url = urllib.parse.quote(url, safe='')
-        proxy_url = f"{
+        # 에러가 났던 지점! 문자열이 잘리지 않도록 '+' 기호로 안전하게 연결
+        proxy_url = GOOGLE_PROXY_URL + "?url=" + encoded_url
+        
+        # User-Agent 길이 축소
+        ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
+        headers = {'User-Agent': ua}
+        
+        res = requests.get(proxy_url, headers=headers, timeout=30)
+        
+        if len(res.text) < 1000:
+            return label, {}
+        
+        soup = BeautifulSoup(res.text, 'html.parser')
+        product_links = soup.find_all('a', href=re.compile(r'gno=\d+'))
+        
+        local_data = {}
+        for link in product_links:
+            p_id = link['href'].split('gno=')[-1].split('&')[0]
+            raw_name = link.get_text(strip=True)
+            if len(raw_name) >= 10:
+                local_data[p_id] = clean_product_name(raw_name)
+                
+        return label, local_data
+    except:
+        return label, {}
+
+if __name__ == "__main__":
+    if not os.path.exists("list.txt"):
+        print("❌ list.txt 파일이 없습니다.")
+        exit(1)
+
+    tasks = []
+    current_label = "기타"
+    with open("list.txt", "r") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("#"):
+                current_label = line.replace("#", "").strip()
+            elif line:
+                tasks.append({"url": line, "label": current_label})
+    
+    send_message("🤖 듀얼 병렬 감시 시스템 가동!")
+    session = requests.Session()
+    
+    while True:
+        if time.time() - start_time > 21000:
+            restart_myself()
+            break
+
+        cycle_count += 1
+        cycle_data = {} 
+        category_counts = {} 
+        
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(scan_target_parallel, tasks))
+        
+        for label, data in results:
+            cycle_data.update(data)
+            category_counts[label] = category_counts.get(label, 0) + len(data)
+            all_seen_names.update(data)
+        
+        last_check_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        current_ids = set(cycle_data.keys())
+        current_tracked_names = cycle_data.copy()
+        
+        if cycle_count > 1:
+            new_ids = current_ids - known_in_stock_ids
+            if new_ids:
+                new_list = [cycle_data[pid] for pid in new_ids]
+                for i in range(0, len(new_list), 30):
+                    chunk = new_list[i:i+30]
+                    msg = "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(chunk)])
+                    send_message(f"🚨 [신규/재입고 포착]\n{msg}")
+            
+            gone_ids = known_in_stock_ids - current_ids
+            if gone_ids:
+                gone_list = [all_seen_names[pid] for pid in gone_ids]
+                for i in range(0, len(gone_list), 30):
+                    chunk = gone_list[i:i+30]
+                    msg = "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(chunk)])
+                    send_message(f"🗑️ [품절 포착]\n{msg}")
+
+        known_in_stock_ids = current_ids
+        
+        print(f"⏳ {cycle_count}회차 완료. 7초 대기 중...")
+        for _ in range(7):
+            check_commands()
+            time.sleep(1)
