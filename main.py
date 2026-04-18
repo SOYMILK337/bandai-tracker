@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 start_time = time.time()
 
-print("🚀 [System] 상태 보고 로직 최적화 완료! 엔진 재출격!")
+print("🚀 [System] 20코어 풀-로드! 하이퍼 듀얼 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -26,7 +26,6 @@ all_seen_names = {}
 category_counts = {}
 current_tracked_names = {}
 
-# 몰별 마지막 스캔 시각 저장
 last_bnkr_time = "대기 중"
 last_naver_time = "대기 중"
 
@@ -82,7 +81,6 @@ def check_commands():
             if cycle_count == 0:
                 send_message("⏳ 첫 번째 정밀 스캔을 진행 중입니다...")
             else:
-                # 상태 메시지 구성
                 status_bnkr = "✅ 반다이몰: 정상 가동 (" + last_bnkr_time + ")"
                 status_naver = "✅ 네이버몰: 정상 가동 (" + last_naver_time + ")"
                 
@@ -165,7 +163,7 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 상태 보고 기능이 업그레이드된 봇이 출격합니다!")
+    send_message("🤖 20코어 풀-로드 시스템 가동! 스캔 속도를 최대치로 끌어올립니다.")
     session = requests.Session()
     
     while True:
@@ -173,7 +171,8 @@ if __name__ == "__main__":
         cycle_count += 1
         cycle_data, category_counts = {}, {}
         
-        with ThreadPoolExecutor(max_workers=10) as ex:
+        # [핵심] 일꾼을 20명으로 늘려 모든 주소를 동시에 한 번에 긁어옵니다.
+        with ThreadPoolExecutor(max_workers=20) as ex:
             results = list(ex.map(scan_target_parallel, tasks))
         
         now_str = datetime.now().strftime('%H:%M:%S')
@@ -183,7 +182,6 @@ if __name__ == "__main__":
             category_counts[label] = category_counts.get(label, 0) + len(data)
             all_seen_names.update(data)
             
-            # 마지막 성공 시각 업데이트
             if "naver.com" in url: last_naver_time = now_str
             else: last_bnkr_time = now_str
         
