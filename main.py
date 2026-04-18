@@ -11,23 +11,30 @@ def send_message(text):
     requests.post(url, data=payload)
 
 def check_bandai_mall():
-    # 테스트용: RG 하이뉴 건담 주소
-    url = "https://www.bnkrmall.co.kr/goods/detail.do?gno=50720"
+    # 여기에 직접 찾으신 '살아있는 상품 주소'를 넣으세요!
+    url = "https://www.bnkrmall.co.kr/goods/detail.do?gno=91246553" # 예시 주소입니다.
     
-    # 봇이 아니라 사람인 척 하기 위한 설정 (헤더)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     
     response = requests.get(url, headers=headers)
     
-    # 사이트 전체 내용 중에서 '품절'이라는 글자가 있는지 확인합니다.
+    # [추가된 기능] 만약 메인 페이지로 튕겨나갔다면?
+    if "detail.do" not in response.url:
+        return "⚠️ 오류: 상품 페이지를 찾을 수 없습니다. (주소 확인 필요!)"
+    
+    # 상품명이 들어가는 부분을 찾아봅니다. (페이지가 정상인지 확인용)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    title = soup.find('p', class_='prod_name') # 반다이몰 상품명 태그
+    
+    product_name = title.get_text(strip=True) if title else "알 수 없는 상품"
+    
     if "품절" in response.text:
-        return "❌ 현재 품절 상태입니다."
+        return f"❌ [{product_name}] 아직 품절입니다."
     else:
-        # '품절' 글자가 없으면 재입고된 것으로 간주합니다.
-        return "✅ 재입고 완료! 지금 바로 확인하세요!"
+        return f"✅ [{product_name}] 재입고 완료! 지르세요!"
 
 if __name__ == "__main__":
     status = check_bandai_mall()
-    send_message(f"반다이몰 감시 결과: {status}")
+    send_message(f"반다이몰 감시 결과:\n{status}")
