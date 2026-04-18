@@ -3,6 +3,7 @@ import requests
 import time
 import re
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 # [설정]
 token = os.environ['TELEGRAM_TOKEN']
@@ -24,19 +25,24 @@ def check_commands():
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         params = {'offset': last_update_id + 1, 'timeout': 1}
         response = requests.get(url, params=params).json()
-        
         if response.get("ok") and response.get("result"):
             for update in response["result"]:
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"]:
-                    user_text = update["message"]["text"]
-                    if user_text == "/상태":
+                    if update["message"]["text"] == "/상태":
                         msg = (f"🤖 [반다이 봇 상태 보고]\n"
-                               f"✅ 정상 가동 중 (무한 루프)\n"
                                f"🔄 감시 횟수: {cycle_count}회차\n"
-                               f"📦 감시 중인 상품: {len(last_stock_status)}개")
+                               f"📦 감시 상품 총합: {len(last_stock_status)}개")
                         send_message(msg)
     except: pass
+
+def get_paged_url(url, page_num):
+    """긴 주소에서 page 파라미터만 정확히 교체합니다."""
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    params['page'] = [str(page_num)] # page 번호 교체
+    new_query = urlencode(params, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
 
 def scan_category(category_url):
     try:
@@ -44,70 +50,60 @@ def scan_category(category_url):
         response = requests.get(proxy_url, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # [수정] 클래스 이름 대신 'gno=' 링크를 가진 모든 li 태그를 타겟팅합니다.
         items = soup.find_all('li')
         updates = []
+        found_in_page = 0
         
-        found_count = 0
         for item in items:
-            # 해당 li 안에 상품 상세 링크가 있는지 확인
             link_tag = item.find('a', href=re.compile(r'gno='))
             if not link_tag: continue
             
-            found_count += 1
-            # 상품명 추출 (태그 내의 텍스트 중 가장 긴 것을 상품명으로 간주)
-            p_name = item.get_text(separator=' ', strip=True)
-            # 불필요한 공백/줄바꿈 정리
-            p_name = ' '.join(p_name.split())
-            
+            found_in_page += 1
+            p_name = ' '.join(item.get_text(separator=' ', strip=True).split())
             p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
             p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}" if link_tag['href'].startswith('/') else link_tag['href']
 
-            # 주인님의 통찰: 링크(a 태그) 내부에 특정 '품절' 마크가 있는지 확인
-            # (반다이몰은 품절 시 a 태그를 지우거나 특정 클래스를 부여함)
-            is_sold_out = "sold_out" in str(item) or "품절" in item.get_text()
-            current_status = "품절" if is_sold_out else "재고있음"
+            # 링크(a 태그)가 존재하면 재고 있음으로 판단
+            current_status = "재고있음"
             
             if p_id in last_stock_status:
                 if last_stock_status[p_id] == "품절" and current_status == "재고있음":
-                    updates.append(f"🚨 [재입고!] {p_name[:40]}...\n주소: {p_url}")
+                    updates.append(f"🚨 [재입고!] {p_name[:35]}...\n{p_url}")
             
             last_stock_status[p_id] = current_status
-            
-        print(f"📊 이 페이지에서 {found_count}개의 상품을 발견했습니다.")
-        return updates
+        return updates, found_in_page
     except Exception as e:
-        print(f"스캔 오류: {e}")
-        return []
+        print(f"오류: {e}")
+        return [], 0
 
 if __name__ == "__main__":
     if os.path.exists("list.txt"):
         with open("list.txt", "r") as f:
             lines = [line.strip() for line in f.readlines() if line.strip()]
         
-        send_message("🛠️ 시력 교정 완료! 정밀 감시를 다시 시작합니다.")
+        send_message("🛠️ 주소 정밀 수술 완료! 이제 모든 페이지를 훑기 시작합니다.")
         
         while True:
             cycle_count += 1
             for line in lines:
-                check_commands()
                 if '|' in line:
-                    raw_url, max_page = line.split('|')
+                    base_url, max_page = line.split('|')
                     max_page = int(max_page)
                 else:
-                    raw_url, max_page = line, 1
-                
-                clean_url = re.sub(r'[&?]page=\d+', '', raw_url)
-                separator = '&' if '?' in clean_url else '?'
+                    base_url, max_page = line, 1
 
                 for p in range(1, max_page + 1):
-                    p_url = f"{clean_url}{separator}page={p}"
-                    print(f"🔍 {cycle_count}회차 감시 중: {p_url}")
-                    found_updates = scan_category(p_url)
+                    target_p_url = get_paged_url(base_url, p)
+                    print(f"🔍 {cycle_count}회차 - {p}/{max_page}페이지 감시 중")
+                    
+                    found_updates, count = scan_category(target_p_url)
                     for msg in found_updates:
                         send_message(msg)
-                    time.sleep(2)
+                    
+                    check_commands()
+                    time.sleep(2) # 페이지 간 간격
             
-            for _ in range(10):
+            print(f"⏳ {cycle_count}회차 완료. 총 {len(last_stock_status)}개 상품 감시 중.")
+            for _ in range(10): # 10초 대기 중 명령어 확인
                 check_commands()
                 time.sleep(1)
