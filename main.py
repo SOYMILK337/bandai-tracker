@@ -1,45 +1,40 @@
-# ... (상단 설정 부분 동일)
+import os
+import requests
+import time
+import re
+from bs4 import BeautifulSoup
 
-def scan_page(session, target_url, prev_url):
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': prev_url
-        }
-        proxy_url = f"{GOOGLE_PROXY_URL}?url={target_url}"
-        response = session.get(proxy_url, headers=headers, timeout=30)
-        soup = BeautifulSoup(response.text, 'html.parser')
+# [진단용] 시작하자마자 바로 출력
+print("🚀 [진단] 봇이 이제 막 엔진을 켰습니다!")
+
+token = os.environ.get('TELEGRAM_TOKEN')
+chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR/exec"
+
+if not token or not chat_id:
+    print("❌ [에러] 텔레그램 토큰이나 ID 설정이 안 되어 있습니다!")
+    exit()
+
+tracked_products = {}
+cycle_count = 0
+last_update_id = -1
+
+# ... (중간 함수들은 동일)
+
+if __name__ == "__main__":
+    print("🔍 [진단] 메인 함수 진입 완료")
+    
+    if os.path.exists("list.txt"):
+        print("✅ [진단] list.txt 파일을 찾았습니다!")
+        with open("list.txt", "r") as f:
+            urls = [line.strip() for line in f.readlines() if line.strip()]
         
-        # 상품 항목 추출
-        items = soup.select('.main-product-tab-goods > li') or soup.find_all('li', attrs={'data-childno': True})
-        found_in_page = 0
-        
-        for item in items:
-            link_tag = item.find('a', href=re.compile(r'gno='))
-            if not link_tag: continue
+        if not urls:
+            print("⚠️ [진단] list.txt 파일은 있는데 내용이 텅 비어있습니다!")
+            exit()
             
-            p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
-            name_tag = item.find('h5') or item.select_one('.font-15')
-            p_name = name_tag.get_text(strip=True) if name_tag else "상품명 미상"
-            p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}" if link_tag['href'].startswith('/') else link_tag['href']
-
-            # [핵심] 품절 판정 로직
-            # 상품 항목 HTML 전체에서 'sold_out'이나 '품절' 단어가 있는지 찾습니다.
-            item_html = str(item).lower()
-            is_sold_out = "sold_out" in item_html or "품절" in item.get_text()
-            current_status = "품절" if is_sold_out else "재고있음"
-            
-            if p_id in tracked_products:
-                # '품절'이었다가 '재고있음'으로 바뀌는 순간을 포착!
-                if tracked_products[p_id]['status'] == "품절" and current_status == "재고있음":
-                    send_message(f"🚨 [재입고 포착!]\n📦 {p_name}\n🔗 {p_url}")
-            
-            tracked_products[p_id] = {"name": p_name, "status": current_status}
-            found_in_page += 1
-            
-        return found_in_page
-    except Exception as e:
-        print(f"❌ 스캔 중 오류 발생: {e}")
-        return 0
-
-# ... (이하 명령어 처리 및 무한루프 로직 동일)
+        print(f"📡 감시 시작! 대상 페이지: {len(urls)}개")
+        # ... (이후 while True 루프 동일)
+    else:
+        # 이 메시지가 로그에 찍힌다면 파일 위치가 잘못된 겁니다!
+        print("❌ [진단 에러] list.txt 파일을 찾을 수 없습니다. 파일명을 확인하세요!")
