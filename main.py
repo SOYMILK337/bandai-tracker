@@ -5,13 +5,16 @@ import re
 import json
 from bs4 import BeautifulSoup
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 타임스탬프 기능 탑재 완료! 엔진을 재가동합니다.")
+# ✅ 한국 표준시(KST) 설정 (UTC+9)
+KST = timezone(timedelta(hours=9))
+
+print("🚀 [System] 한국 시각(KST) 동기화 완료! 엔진을 재가동합니다.")
 
 # ==========================================
 # ✅ 오용진 님의 4개 프록시 ID 세팅 유지
@@ -39,14 +42,14 @@ cycle_count = 0
 last_update_id = -1
 
 def send_message(text):
-    url = "https://api.telegram.org/bot" + str(token) + "/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try: requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=10)
     except: pass
 
 def restart_myself():
     if not github_pat or not repo_full_name: return
-    url = "https://api.telegram.org/repos/" + str(repo_full_name) + "/dispatches"
-    headers = {"Authorization": "token " + str(github_pat), "Accept": "application/vnd.github.v3+json"}
+    url = f"https://api.telegram.org/repos/{repo_full_name}/dispatches"
+    headers = {"Authorization": f"token {github_pat}", "Accept": "application/vnd.github.v3+json"}
     try: requests.post(url, headers=headers, json={"event_type": "restart_bot"}, timeout=10)
     except: pass
 
@@ -57,7 +60,7 @@ def clean_product_name(raw_name):
 def check_commands():
     global last_update_id
     try:
-        url = "https://api.telegram.org/bot" + str(token) + "/getUpdates"
+        url = f"https://api.telegram.org/bot{token}/getUpdates"
         res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.5}, timeout=5)
         response = res.json()
         if not response or not response.get("ok"): return
@@ -66,9 +69,9 @@ def check_commands():
             if "message" in update and "text" in update["message"]:
                 cmd = update["message"]["text"]
                 if cmd == "/상태":
-                    msg = "📊 [시스템 정밀 상태 보고]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
-                    msg += "\n".join(["📍 " + str(l) + ": " + str(c) + "개" for l, c in category_counts.items()])
-                    send_message(msg + "\n\n📦 총합: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 21~22초")
+                    msg = "📊 [한국 시각 기준 정밀 보고]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
+                    msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
+                    send_message(msg + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 주기: 약 21~22초")
                 elif cmd == "/추적상품확인":
                     if not current_tracked_names:
                         send_message("⏳ 데이터 수집 중입니다.")
@@ -85,7 +88,7 @@ def scan_target_parallel(task):
     try:
         current_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]
         proxy_index += 1
-        proxy_url = "https://script.google.com/macros/s/" + current_id + "/exec?url=" + urllib.parse.quote(url, safe='')
+        proxy_url = f"https://script.google.com/macros/s/{current_id}/exec?url=" + urllib.parse.quote(url, safe='')
         res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0 Chrome/120.0.0'}, timeout=30)
         if len(res.text) < 1000: return label, {}, url
         soup = BeautifulSoup(res.text, 'html.parser')
@@ -114,13 +117,14 @@ def scan_target_parallel(task):
 if __name__ == "__main__":
     tasks = []
     current_label = "기타"
+    if not os.path.exists("list.txt"): exit(1)
     with open("list.txt", "r") as f:
         for line in f:
             line = line.strip()
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 타임스탬프 감시 엔진 가동! 초 단위까지 정확히 보고합니다.")
+    send_message("🤖 한국 시각 동기화 엔진 가동! 이제 시각이 정확하게 표시됩니다.")
     
     while True:
         if time.time() - start_time > 21000: restart_myself(); break
@@ -129,7 +133,9 @@ if __name__ == "__main__":
         with ThreadPoolExecutor(max_workers=20) as ex:
             results = list(ex.map(scan_target_parallel, tasks))
         
-        now_str = datetime.now().strftime('%H:%M:%S')
+        # ✅ 한국 시각으로 시각 획득
+        now_str = datetime.now(KST).strftime('%H:%M:%S')
+        
         for label, data, url in results:
             cycle_data.update(data)
             category_counts[label] = category_counts.get(label, 0) + len(data)
@@ -138,8 +144,7 @@ if __name__ == "__main__":
             else: last_bnkr_time = now_str
         
         current_ids = set(cycle_data.keys())
-        # [수정] 알림 시각을 초 단위까지 포함
-        event_time = datetime.now().strftime('%H:%M:%S')
+        event_time = datetime.now(KST).strftime('%H:%M:%S')
 
         if cycle_count > 1:
             new_ids = current_ids - known_in_stock_ids
