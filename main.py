@@ -8,15 +8,16 @@ import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+# 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 4계정 쿼드 하이퍼 엔진 가동! (오용진님 전용)")
+print("🚀 [System] 4계정 쿼드 하이퍼 엔진 풀-로드 가동!")
 
 # ==========================================
-# 🚨 [수정 필수] 2~4번째 구글 계정 ID를 아래에 마저 채워주세요!
+# ✅ 오용진 님이 주신 4개의 프록시 ID 세팅 완료!
 # ==========================================
 PROXY_IDS = [
-    "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR", # 기존 ID
+    "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
     "AKfycbwUJTb02XOUbV-obvpE7WXRdDn9AxJl5H-KWb-kRxCVqQ3AJpkuBFokAoxwkhp_gWXB",
     "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw"
@@ -57,9 +58,9 @@ def check_commands():
     global last_update_id
     try:
         url = "https://api.telegram.org/bot" + str(token) + "/getUpdates"
-        res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 1}, timeout=5)
+        res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.5}, timeout=5)
         response = res.json()
-        if not response.get("ok"): return
+        if not response or not response.get("ok"): return
         for update in response["result"]:
             last_update_id = update["update_id"]
             if "message" in update and "text" in update["message"]:
@@ -67,7 +68,21 @@ def check_commands():
                 if cmd == "/상태":
                     msg = "📊 [8만건 하이퍼 엔진 상태]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
                     msg += "\n".join(["📍 " + str(l) + ": " + str(c) + "개" for l, c in category_counts.items()])
-                    send_message(msg + "\n\n📦 총합: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 22초")
+                    send_message(msg + "\n\n📦 총 감시중: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 22초")
+                elif cmd == "/추적상품확인":
+                    if not current_tracked_names:
+                        send_message("⏳ 데이터 수집 중입니다.")
+                    else:
+                        sorted_items = []
+                        for pid, name in current_tracked_names.items():
+                            tag = "[네이버]" if pid.startswith("N_") else "[본진]"
+                            sorted_items.append(tag + " " + name)
+                        sorted_items.sort()
+                        send_message("📂 전체 감시 목록 (총 " + str(len(sorted_items)) + "개)")
+                        for i in range(0, len(sorted_items), 30):
+                            chunk = sorted_items[i:i+30]
+                            msg = "\n".join([str(i+idx+1) + ". " + n for idx, n in enumerate(chunk)])
+                            send_message("📋 [목록 " + str(i//30 + 1) + "]\n" + msg)
     except: pass
 
 def scan_target_parallel(task):
@@ -77,7 +92,7 @@ def scan_target_parallel(task):
         current_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]
         proxy_index += 1
         proxy_url = "https://script.google.com/macros/s/" + current_id + "/exec?url=" + urllib.parse.quote(url, safe='')
-        res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0'}, timeout=30)
+        res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0 Chrome/120.0.0'}, timeout=30)
         if len(res.text) < 1000: return label, {}, url
         soup = BeautifulSoup(res.text, 'html.parser')
         local_data = {}
@@ -88,9 +103,11 @@ def scan_target_parallel(task):
                 p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
                 attr = link.get('data-shp-' + 'contents-dtl')
                 if attr:
-                    for item in json.loads(attr):
-                        if item.get('key') == 'chnl_prod_nm':
-                            local_data[p_id] = clean_product_name(item.get('value')); break
+                    try:
+                        for item in json.loads(attr):
+                            if item.get('key') == 'chnl_prod_nm':
+                                local_data[p_id] = clean_product_name(item.get('value')); break
+                    except: pass
         else:
             links = soup.find_all('a', href=re.compile(r'gno=\d+'))
             for link in links:
@@ -109,7 +126,7 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 하이퍼 쿼드 엔진 가동! (22초 주기 무한 감시)")
+    send_message("🤖 4계정 쿼드 하이퍼 엔진 가동! (22초 주기)")
     
     while True:
         if time.time() - start_time > 21000: restart_myself(); break
@@ -130,17 +147,24 @@ if __name__ == "__main__":
         if cycle_count > 1:
             new_ids = current_ids - known_in_stock_ids
             if new_ids:
-                for i in range(0, len(new_ids), 30):
-                    msg = "\n".join([("[네이버] " if pid.startswith("N_") else "[본진] ") + cycle_data[pid] for pid in list(new_ids)[i:i+30]])
-                    send_message("🚨 [신규/재입고 포착]\n" + msg)
+                new_list = []
+                for pid in new_ids:
+                    tag = "[네이버]" if pid.startswith("N_") else "[본진]"
+                    new_list.append(tag + " " + cycle_data[pid])
+                for i in range(0, len(new_list), 30):
+                    send_message("🚨 [신규/재입고 포착]\n" + "\n".join([str(idx+1) + ". " + n for idx, n in enumerate(new_list[i:i+30])]))
+            
             gone_ids = known_in_stock_ids - current_ids
             if gone_ids:
-                for i in range(0, len(gone_ids), 30):
-                    msg = "\n".join([("[네이버] " if pid.startswith("N_") else "[본진] ") + all_seen_names[pid] for pid in list(gone_ids)[i:i+30]])
-                    send_message("🗑️ [품절 포착]\n" + msg)
+                gone_list = []
+                for pid in gone_ids:
+                    tag = "[네이버]" if pid.startswith("N_") else "[본진]"
+                    gone_list.append(tag + " " + all_seen_names[pid])
+                for i in range(0, len(gone_list), 30):
+                    send_message("🗑️ [품절 포착]\n" + "\n".join([str(idx+1) + ". " + n for idx, n in enumerate(gone_list[i:i+30])]))
 
         known_in_stock_ids = current_ids
         current_tracked_names = cycle_data.copy()
-        for _ in range(20):
+        for _ in range(2):
             check_commands()
-            time.sleep(0.5)
+            time.sleep(5)
