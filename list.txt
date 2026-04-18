@@ -22,3 +22,19 @@ https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&c
 https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=&page=1&sale=&soldout=Y&reserved=&rowprice=&highprice=&chkbrand=546&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
 # 12. 프리미엄 반다이 건프라
 https://www.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=
+# 13. [NAVER] PG
+https://brand.naver.com/bandai/category/7469c4bfaba0478ca06c44cadd9dfdeb?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 14. [NAVER] MG
+https://brand.naver.com/bandai/category/d3dec23f9a8c4bbc8de3ab2746312a1c?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 15. [NAVER] RG
+https://brand.naver.com/bandai/category/a7f23d00c7204277b9f8e509b7d3fd5b?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 16. [NAVER] HGUC
+https://brand.naver.com/bandai/category/d02e6260462545008107ee081c7da3f8?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 17. [NAVER] HG 빌파트라이
+https://brand.naver.com/bandai/category/3846165675134c1692047a5307efec94?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 18. [NAVER] HG IBO (철혈)
+https://brand.naver.com/bandai/category/88e347d8f9954ca79f98d8e7fbdc7ebe?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 19. [NAVER] HG CE (시드)
+https://brand.naver.com/bandai/category/63c7ca235bbb4934b5c17d2a2b4953f7?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
+# 20. [NAVER] HG ETC (기타)
+https://brand.naver.com/bandai/category/6ac9b35f83dc460a93e2c729446b4bd4?st=POPULAR&dt=BIG_IMAGE&page=1&size=40&filters=oa
