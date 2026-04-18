@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 따옴표 잘림 방지 완료. 엔진 정상 출격!")
+print("🚀 [System] 프리미엄 반다이 듀얼 파싱 엔진 출격!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -49,7 +49,8 @@ def restart_myself():
         pass
 
 def clean_product_name(raw_name):
-    clean = re.sub(r'좋아요|장바구니|\d{1,3}(,\d{3})*원', '', raw_name)
+    # [핵심 수정] 프리미엄 반다이 전용 노이즈(구매진행중, 날짜 등) 완벽 제거
+    clean = re.sub(r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지', '', raw_name)
     return clean.strip()
 
 def check_commands():
@@ -112,7 +113,7 @@ if __name__ == "__main__":
                 elif line:
                     tasks.append({"url": line, "label": current_label})
         
-        send_message("🤖 정밀 병렬 감시 시스템 재가동합니다.")
+        send_message("🤖 프반+일반 듀얼 병렬 감시 시스템 가동!")
         session = requests.Session()
         
         while True:
@@ -167,7 +168,6 @@ if __name__ == "__main__":
                     send_message(f"📋 [목록 {i//30 + 1}]\n{msg}")
                 confirmation_requested = False
             
-            # [수정] 복사 시 잘리지 않도록 문장을 짧게 다듬었습니다.
             print(f"⏳ {cycle_count}회차 완료. 7초 대기...")
             for _ in range(7):
                 check_commands()
