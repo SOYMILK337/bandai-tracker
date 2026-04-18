@@ -4,13 +4,14 @@ import time
 import re
 from bs4 import BeautifulSoup
 
-print("🚀 [System] 벌크 보고 모드(30개 단위) 가동!")
+print("🚀 [System] 모바일 기반 정밀 감시 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR/exec"
 
-tracked_products = set() 
+# 상품 정보를 저장 (ID: 상품명)
+tracked_products = {} 
 cycle_count = 0
 last_update_id = -1
 report_requested = False
@@ -34,18 +35,32 @@ def check_commands():
                     cmd = update["message"]["text"]
                     if cmd == "/상태":
                         report_requested = True
-                        send_message("🔍 현재 판매 중인 목록을 전체 스캔 중입니다.")
+                        send_message("🔍 실시간 재고 현황을 파악 중입니다.")
                     elif cmd == "/추적상품확인":
-                        send_message(f"📦 현재 총 {len(tracked_products)}개의 상품이 목록에 노출되어 있습니다.")
+                        if not tracked_products:
+                            send_message("아직 수집된 데이터가 없습니다.")
+                            continue
+                        
+                        # 전체 리스트 30개씩 끊어 보내기
+                        sorted_names = sorted(tracked_products.values())
+                        total = len(sorted_names)
+                        send_message(f"📦 총 {total}개의 상품을 감시 중입니다.")
+                        
+                        for i in range(0, total, 30):
+                            chunk = sorted_names[i:i+30]
+                            msg = [f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)]
+                            send_message(f"📋 [목록 {i//30 + 1}]\n" + "\n".join(msg))
+                            time.sleep(0.5)
     except: pass
 
 def scan_target(session, url, new_items_list):
-    """신규 상품을 찾으면 리스트에 담기만 합니다."""
     try:
         proxy_url = f"{GOOGLE_PROXY_URL}?url={url}"
         response = session.get(proxy_url, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.select('.main-product-tab-goods > li') or soup.find_all('li', attrs={'data-childno': True})
+        
+        # 모바일 버전과 PC 버전 모두 대응 가능한 선택자
+        items = soup.select('.main-product-tab-goods > li') or soup.select('.goods_item') or soup.find_all('li', attrs={'data-childno': True})
         
         for item in items:
             link_tag = item.find('a', href=re.compile(r'gno='))
@@ -53,12 +68,11 @@ def scan_target(session, url, new_items_list):
             
             p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
             if p_id not in tracked_products:
-                name_tag = item.find('h5') or item.select_one('.font-15')
+                name_tag = item.find('h5') or item.select_one('.font-15') or item.select_one('.name')
                 p_name = name_tag.get_text(strip=True) if name_tag else "상품명 미상"
                 
-                # 링크 없이 이름만 저장
+                tracked_products[p_id] = p_name
                 new_items_list.append(p_name)
-                tracked_products.add(p_id)
                 
         return len(items)
     except: return 0
@@ -68,35 +82,31 @@ if __name__ == "__main__":
         with open("list.txt", "r") as f:
             urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        send_message(f"🤖 실시간 감시 가동! (30개 단위 벌크 보고)")
+        send_message(f"🤖 모바일 모드 감시 시작! (대상: {len(urls)}개 카테고리)")
         session = requests.Session()
         
         while True:
             cycle_count += 1
-            total_visible = 0
-            found_this_cycle = [] # 이번 회차에 새로 발견한 상품들 바구니
+            total_visible_now = 0
+            found_this_cycle = [] 
             
             for url in urls:
                 check_commands()
-                total_visible += scan_target(session, url, found_this_cycle)
+                total_visible_now += scan_target(session, url, found_this_cycle)
                 time.sleep(5)
             
-            # [핵심] 새로 발견한 상품이 있다면 30개씩 묶어서 발송
+            # 신규 상품 발견 시 30개씩 묶어서 보고
             if found_this_cycle:
-                total_new = len(found_this_cycle)
-                send_message(f"🚨 [신규 포착!] 총 {total_new}개의 상품이 새로 나타났습니다.")
-                
-                for i in range(0, total_new, 30):
+                for i in range(0, len(found_this_cycle), 30):
                     chunk = found_this_cycle[i:i+30]
-                    msg_list = [f"{i + idx + 1}. {name}" for idx, name in enumerate(chunk)]
-                    send_message(f"📦 [포착 리스트 {i//30 + 1}]\n" + "\n".join(msg_list))
+                    msg = [f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)]
+                    send_message(f"🚨 [신규 포착]\n" + "\n".join(msg))
                     time.sleep(0.5)
             
             if report_requested:
-                send_message(f"📋 [감시 보고]\n🔄 {cycle_count}회차 완료\n📦 현재 구매 가능 상품: {total_visible}개")
+                send_message(f"📋 [보고] {cycle_count}회차 완료\n📦 현재 감시 중인 고유 상품: {len(tracked_products)}개\n✨ 중복 없이 정상 수집 중입니다.")
                 report_requested = False
             
-            print(f"⏳ {cycle_count}회차 완료. 누적 {len(tracked_products)}개 기체 인지 중.")
             for _ in range(30):
                 check_commands()
                 time.sleep(1)
