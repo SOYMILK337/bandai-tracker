@@ -18,3 +18,7 @@ https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&c
 https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
 # 10. HG 빌드/기타
 https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
+# 11. MGSD
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=&page=1&sale=&soldout=Y&reserved=&rowprice=&highprice=&chkbrand=546&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
+# 12. 프리미엄 반다이 건프라
+https://www.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=
