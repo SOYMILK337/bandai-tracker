@@ -1,29 +1,20 @@
-# 1. MG (Master Grade)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
-
-# 2. RG (Real Grade)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
-
-# 3. PG (Perfect Grade)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
-
-# 4. HG - 수성의 마녀
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
-
-# 5. HG - SEED / FREEDOM / DESTINY
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=284,876,294&soldout=Y&endGoods=Y
-
-# 6. HG - 우주세기 클래식 (퍼스트, Z, ZZ, 역샤)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=280,301,300,281&soldout=Y&endGoods=Y
-
-# 7. HG - 우주세기 후기 (UC, NT, 하사웨이)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=282,780,283&soldout=Y&endGoods=Y
-
-# 8. HG - 비우주세기 인기작 (00, 철혈)
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=285,286,855&soldout=Y&endGoods=Y
-
-# 9. HG - 오리진 / 최신작
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
-
-# 10. HG - 빌드 시리즈 / 기타
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
+# 1. MG
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
+# 2. RG
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
+# 3. PG
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
+# 4. HG 수성의 마녀
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
+# 5. HG SEED 계열
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=284,876,294&soldout=Y&endGoods=Y
+# 6. HG 우주세기 클래식
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=280,301,300,281&soldout=Y&endGoods=Y
+# 7. HG 우주세기 후기
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=282,780,283&soldout=Y&endGoods=Y
+# 8. HG 비우주세기 인기작
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=285,286,855&soldout=Y&endGoods=Y
+# 9. HG 오리진/최신작
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
+# 10. HG 빌드/기타
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
