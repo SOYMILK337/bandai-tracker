@@ -4,8 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 
-# [진단] 봇 엔진 가동
-print("🚀 [System] 모바일 정밀 탐색 엔진 가동!")
+print("🚀 [System] 즉시 응답형 엔진으로 업그레이드 완료!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -14,7 +13,7 @@ GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80d
 tracked_products = {} 
 cycle_count = 0
 last_update_id = -1
-report_requested = False
+# report_requested 변수는 이제 필요 없어서 삭제합니다.
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -23,7 +22,8 @@ def send_message(text):
     except: pass
 
 def check_commands():
-    global last_update_id, report_requested
+    """명령어를 확인하는 즉시 응답합니다."""
+    global last_update_id
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         params = {'offset': last_update_id + 1, 'timeout': 1}
@@ -33,16 +33,24 @@ def check_commands():
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"]:
                     cmd = update["message"]["text"]
+                    
+                    # [수정] 기다리지 않고 즉시 응답!
                     if cmd == "/상태":
-                        report_requested = True
-                        send_message("🔍 현재 모든 모바일 카테고리를 스캔 중입니다.")
+                        status_msg = (
+                            f"📊 [실시간 봇 상태]\n"
+                            f"🔄 현재 {cycle_count}회차 감시 중\n"
+                            f"📦 인지 중인 총 상품: {len(tracked_products)}개\n"
+                            f"⏱️ 마지막 확인: 방금 전"
+                        )
+                        send_message(status_msg)
+                        
                     elif cmd == "/추적상품확인":
                         if not tracked_products:
-                            send_message("수집된 데이터가 0개입니다. 잠시 후 다시 시도해 주세요.")
+                            send_message("아직 수집된 데이터가 없습니다.")
                             continue
                         sorted_names = sorted(tracked_products.values())
                         total = len(sorted_names)
-                        send_message(f"📦 총 {total}개 상품 감시 중")
+                        send_message(f"📦 총 {total}개 상품 감시 중 (30개씩 전송)")
                         for i in range(0, total, 30):
                             chunk = sorted_names[i:i+30]
                             msg = [f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)]
@@ -52,58 +60,48 @@ def check_commands():
 
 def scan_target(session, url, new_items_list):
     try:
-        # [수정] 실제 모바일 기기(아이폰)처럼 보이도록 헤더 설정
         headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
         }
         proxy_url = f"{GOOGLE_PROXY_URL}?url={url}"
         response = session.get(proxy_url, headers=headers, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # [수정] 모바일 페이지의 모든 상품 리스트 후보군을 탐색
         items = soup.find_all('li') + soup.find_all('div', class_=re.compile(r'item|goods'))
-        
-        found_in_this_page = 0
+        found_count = 0
         for item in items:
             link_tag = item.find('a', href=re.compile(r'gno='))
             if not link_tag: continue
             
             p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
             if p_id not in tracked_products:
-                # 상품명 추출 (p, span, h5 등 모바일에서 쓰이는 모든 태그 확인)
                 name_tag = item.find('p', class_='name') or item.find('div', class_='name') or item.find('h5') or item.find('span', class_='tit')
                 p_name = name_tag.get_text(strip=True) if name_tag else "이름 없는 상품"
                 
                 tracked_products[p_id] = p_name
                 new_items_list.append(p_name)
-                found_in_this_page += 1
-                
-        return found_in_this_page
-    except Exception as e:
-        print(f"❌ 스캔 에러: {e}")
-        return 0
+                found_count += 1
+        return found_count
+    except: return 0
 
 if __name__ == "__main__":
     if os.path.exists("list.txt"):
         with open("list.txt", "r") as f:
             urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        send_message(f"🤖 모바일 정밀 감시 시작! (감시 페이지: {len(urls)}개)")
+        send_message(f"🤖 감시 엔진 가동! (응답 속도 개선 버전)")
         session = requests.Session()
         
         while True:
             cycle_count += 1
-            total_found_now = 0
             found_this_cycle = [] 
             
             for url in urls:
-                check_commands()
-                count = scan_target(session, url, found_this_cycle)
-                total_found_now += count
-                time.sleep(5)
+                check_commands() # 여기서 명령어를 체크할 때 바로 답장을 보냅니다!
+                scan_target(session, url, found_this_cycle)
+                # [수정] 대기 시간을 5초에서 2초로 줄여 회전 속도를 높입니다.
+                time.sleep(2)
             
-            # 신규 발견 상품 보고 (30개 단위)
             if found_this_cycle:
                 for i in range(0, len(found_this_cycle), 30):
                     chunk = found_this_cycle[i:i+30]
@@ -111,11 +109,9 @@ if __name__ == "__main__":
                     send_message(f"🚨 [신규 포착]\n" + "\n".join(msg))
                     time.sleep(0.5)
             
-            if report_requested:
-                send_message(f"📋 [보고] {cycle_count}회차 완료\n📦 현재 감시 중인 고유 상품: {len(tracked_products)}개")
-                report_requested = False
+            # 메인 루프 끝날 때까지 기다리지 않아도 되므로 하단 report 로직 삭제
             
             print(f"⏳ {cycle_count}회차 완료. 누적 {len(tracked_products)}개.")
-            for _ in range(30):
+            for _ in range(20): # 휴식 시간을 조금 줄임
                 check_commands()
                 time.sleep(1)
