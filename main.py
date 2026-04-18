@@ -11,13 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-# ✅ 한국 표준시(KST) 설정 (UTC+9)
+# 한국 표준시(KST) 설정
 KST = timezone(timedelta(hours=9))
 
-print("🚀 [System] 한국 시각(KST) 동기화 완료! 엔진을 재가동합니다.")
+print("🚀 [System] 골든 타임 보호 시스템(14:50-16:15) 탑재 완료!")
 
 # ==========================================
-# ✅ 오용진 님의 4개 프록시 ID 세팅 유지
+# 프록시 ID 세팅
 # ==========================================
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
@@ -69,7 +69,7 @@ def check_commands():
             if "message" in update and "text" in update["message"]:
                 cmd = update["message"]["text"]
                 if cmd == "/상태":
-                    msg = "📊 [한국 시각 기준 정밀 보고]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
+                    msg = "📊 [골든 타임 보호 모드 가동 중]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
                     msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
                     send_message(msg + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 주기: 약 21~22초")
                 elif cmd == "/추적상품확인":
@@ -124,18 +124,40 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 한국 시각 동기화 엔진 가동! 이제 시각이 정확하게 표시됩니다.")
+    send_message("🤖 골든 타임 보호 엔진 가동! (오후 2:50~4:15 자동 재시작 방지)")
     
     while True:
-        if time.time() - start_time > 21000: restart_myself(); break
+        # --- [골든 타임 보호 및 리셋 로직] ---
+        now_kst = datetime.now(KST)
+        curr_hm = now_kst.hour * 100 + now_kst.minute
+        elapsed = time.time() - start_time
+        
+        # 1. '사전 예방 리셋': 오후 2:35 ~ 2:45 사이에 봇이 이미 1시간 이상 돌았다면 미리 재시작
+        # (골든 타임 직전에 새 봇으로 교체하여 6시간의 수명을 확보함)
+        if 1435 <= curr_hm <= 1445 and elapsed > 3600:
+            restart_myself()
+            break
+            
+        # 2. '일반 리셋': 5시간 50분이 지났을 때 실행
+        # 단, 현재 시각이 골든 타임(14:50~16:15) 사이라면 리셋을 미룸
+        if elapsed > 21000:
+            if 1450 <= curr_hm <= 1615:
+                # 골든 타임에는 리셋하지 않고 통과 (단, 6시간 한계에 아주 가까우면 예외적으로 실행)
+                if elapsed > 21300: # 5시간 55분 돌파 시 어쩔 수 없이 리셋
+                    restart_myself()
+                    break
+                pass 
+            else:
+                restart_myself()
+                break
+        # ------------------------------------
+
         cycle_count += 1
         cycle_data, category_counts = {}, {}
         with ThreadPoolExecutor(max_workers=20) as ex:
             results = list(ex.map(scan_target_parallel, tasks))
         
-        # ✅ 한국 시각으로 시각 획득
         now_str = datetime.now(KST).strftime('%H:%M:%S')
-        
         for label, data, url in results:
             cycle_data.update(data)
             category_counts[label] = category_counts.get(label, 0) + len(data)
