@@ -11,10 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 4계정 쿼드 엔진 가속 최적화 완료! (24시간 무한 모드)")
+print("🚀 [System] 타임스탬프 기능 탑재 완료! 엔진을 재가동합니다.")
 
 # ==========================================
-# ✅ 오용진 님의 4개 프록시 ID 완벽 세팅
+# ✅ 오용진 님의 4개 프록시 ID 세팅 유지
 # ==========================================
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
@@ -66,23 +66,17 @@ def check_commands():
             if "message" in update and "text" in update["message"]:
                 cmd = update["message"]["text"]
                 if cmd == "/상태":
-                    msg = "📊 [8만건 하이퍼 엔진 상태]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
+                    msg = "📊 [시스템 정밀 상태 보고]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
                     msg += "\n".join(["📍 " + str(l) + ": " + str(c) + "개" for l, c in category_counts.items()])
                     send_message(msg + "\n\n📦 총합: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 21~22초")
                 elif cmd == "/추적상품확인":
                     if not current_tracked_names:
                         send_message("⏳ 데이터 수집 중입니다.")
                     else:
-                        sorted_items = []
-                        for pid, name in current_tracked_names.items():
-                            tag = "[네이버]" if pid.startswith("N_") else "[본진]"
-                            sorted_items.append(tag + " " + name)
-                        sorted_items.sort()
-                        send_message("📂 전체 감시 목록 (총 " + str(len(sorted_items)) + "개)")
-                        for i in range(0, len(sorted_items), 30):
-                            chunk = sorted_items[i:i+30]
-                            msg = "\n".join([str(i+idx+1) + ". " + n for idx, n in enumerate(chunk)])
-                            send_message("📋 [목록 " + str(i//30 + 1) + "]\n" + msg)
+                        items = sorted([("[네이버] " if pid.startswith("N_") else "[본진] ") + name for pid, name in current_tracked_names.items()])
+                        send_message(f"📂 감시 목록 (총 {len(items)}개)")
+                        for i in range(0, len(items), 30):
+                            send_message(f"📋 [목록 {i//30+1}]\n" + "\n".join([f"{i+idx+1}. {n}" for idx, n in enumerate(items[i:i+30])]))
     except: pass
 
 def scan_target_parallel(task):
@@ -101,7 +95,7 @@ def scan_target_parallel(task):
             for link in links:
                 if not link.get('href') or '품절' in link.get_text(): continue
                 p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
-                attr = link.get('data-shp-' + 'contents-dtl')
+                attr = link.get('data-shp-contents-dtl')
                 if attr:
                     try:
                         for item in json.loads(attr):
@@ -126,7 +120,7 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 4계정 통합 감시 출격! (안전 22초 주기 모드)")
+    send_message("🤖 타임스탬프 감시 엔진 가동! 초 단위까지 정확히 보고합니다.")
     
     while True:
         if time.time() - start_time > 21000: restart_myself(); break
@@ -144,30 +138,24 @@ if __name__ == "__main__":
             else: last_bnkr_time = now_str
         
         current_ids = set(cycle_data.keys())
+        # [수정] 알림 시각을 초 단위까지 포함
+        event_time = datetime.now().strftime('%H:%M:%S')
+
         if cycle_count > 1:
             new_ids = current_ids - known_in_stock_ids
             if new_ids:
-                new_list = []
-                for pid in new_ids:
-                    tag = "[네이버]" if pid.startswith("N_") else "[본진]"
-                    new_list.append(tag + " " + cycle_data[pid])
+                new_list = [("[네이버] " if pid.startswith("N_") else "[본진] ") + cycle_data[pid] for pid in new_ids]
                 for i in range(0, len(new_list), 30):
-                    send_message("🚨 [신규/재입고 포착]\n" + "\n".join([str(idx+1) + ". " + n for idx, n in enumerate(new_list[i:i+30])]))
+                    send_message(f"🚨 [신규/재입고 포착] ({event_time})\n" + "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(new_list[i:i+30])]))
             
             gone_ids = known_in_stock_ids - current_ids
             if gone_ids:
-                gone_list = []
-                for pid in gone_ids:
-                    tag = "[네이버]" if pid.startswith("N_") else "[본진]"
-                    gone_list.append(tag + " " + all_seen_names[pid])
+                gone_list = [("[네이버] " if pid.startswith("N_") else "[본진] ") + all_seen_names[pid] for pid in gone_ids]
                 for i in range(0, len(gone_list), 30):
-                    send_message("🗑️ [품절 포착]\n" + "\n".join([str(idx+1) + ". " + n for idx, n in enumerate(gone_list[i:i+30])]))
+                    send_message(f"🗑️ [품절 포착] ({event_time})\n" + "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(gone_list[i:i+30])]))
 
         known_in_stock_ids = current_ids
         current_tracked_names = cycle_data.copy()
-        
-        # [수정 완료] 대기 시간을 14초로 늘려 안정성을 확보합니다.
-        # 2초마다 명령어를 확인하여 봇의 반응 속도를 유지합니다. (7번 반복 = 총 14초)
         for _ in range(7):
             check_commands()
             time.sleep(2)
