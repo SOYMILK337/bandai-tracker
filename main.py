@@ -12,10 +12,14 @@ from concurrent.futures import ThreadPoolExecutor
 start_time = time.time()
 KST = timezone(timedelta(hours=9))
 
-print("🚀 [System] 무결점 고스트 방지 엔진 v2.0 가동!")
+# ✅ 사이클 시간 측정을 위한 변수 초기화
+last_cycle_finish_time = time.time()
+measured_cycle_time = 0 # 실제 측정된 주기
+
+print("🚀 [System] 주기 측정 엔진 탑재 완료! 실시간 성능 보고를 시작합니다.")
 
 # ==========================================
-# ✅ 프록시 ID 세팅 (오용진 님 계정 4개)
+# 프록시 ID 세팅
 # ==========================================
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
@@ -32,7 +36,7 @@ github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
 known_in_stock_ids = set()
-item_to_label = {} # 상품 ID별 카테고리 매핑
+item_to_label = {}
 all_seen_names = {}
 last_bnkr_time, last_naver_time = "대기 중", "대기 중"
 cycle_count = 0
@@ -66,9 +70,11 @@ def check_commands():
             if "message" in update and "text" in update["message"]:
                 cmd = update["message"]["text"]
                 if cmd == "/상태":
-                    msg = "📊 [정밀 엔진 V2 상태 보고]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
+                    msg = "📊 [정밀 사이클 분석 리포트]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
                     msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                    send_message(msg + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 주기: 약 21~22초")
+                    # ✅ 측정된 실제 주기를 소수점 첫째자리까지 표시
+                    cycle_info = f"{measured_cycle_time:.1f}초" if measured_cycle_time > 0 else "측정 중..."
+                    send_message(msg + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 직전 사이클 소요: {cycle_info}")
     except: pass
 
 def scan_target_parallel(task):
@@ -117,18 +123,21 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 무결점 엔진 출격! 골든타임 보호 및 고스트 차단 가동.")
+    send_message("🤖 주기 측정 엔진 탑재 완료! 실시간 성능을 모니터링합니다.")
     
     while True:
+        # 사이클 시작 시각 기록
+        cycle_start_marker = time.time()
+        
         now_kst = datetime.now(KST)
         curr_hm = now_kst.hour * 100 + now_kst.minute
-        elapsed = time.time() - start_time
+        elapsed_from_start = time.time() - start_time
         
         # 골든타임 리셋 로직
-        if 1435 <= curr_hm <= 1445 and elapsed > 3600: restart_myself(); break
-        if elapsed > 21000:
+        if 1435 <= curr_hm <= 1445 and elapsed_from_start > 3600: restart_myself(); break
+        if elapsed_from_start > 21000:
             if not (1450 <= curr_hm <= 1615): restart_myself(); break
-            elif elapsed > 21300: restart_myself(); break
+            elif elapsed_from_start > 21300: restart_myself(); break
 
         cycle_count += 1
         with ThreadPoolExecutor(max_workers=20) as ex:
@@ -137,7 +146,7 @@ if __name__ == "__main__":
         now_str = datetime.now(KST).strftime('%H:%M:%S')
         cycle_data, category_counts = {}, {}
         success_labels = set()
-        filtered_gone_ids = [] # 변수 범위 에러 방지를 위해 초기화
+        filtered_gone_ids = []
         
         for label, data, url, is_success in results:
             if is_success:
@@ -161,7 +170,7 @@ if __name__ == "__main__":
                 for i in range(0, len(new_list), 30):
                     send_message(f"🚨 [신규/재입고 포착] ({event_time})\n" + "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(new_list[i:i+30])]))
             
-            # 품절 포착 (성공한 카테고리만 대상으로 정밀 검사)
+            # 품절 포착
             gone_ids = known_in_stock_ids - current_ids
             filtered_gone_ids = [pid for pid in gone_ids if item_to_label.get(pid) in success_labels]
             
@@ -181,3 +190,6 @@ if __name__ == "__main__":
         for _ in range(7):
             check_commands()
             time.sleep(2)
+
+        # ✅ 한 사이클 완료 후 소요 시간 계산
+        measured_cycle_time = time.time() - cycle_start_marker
