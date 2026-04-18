@@ -1,8 +1,29 @@
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=1&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=2&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=3&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=4&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=5&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=6&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=7&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=%EA%B1%B4%ED%94%84%EB%9D%BC&page=8&sale=&soldout=&reserved=&rowprice=&highprice=&chkbrand=633%2C180%2C509%2C403%2C189%2C182%2C546%2C404%2C183%2C184%2C181%2C185%2C677%2C188%2C175&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
+# 1. MG (Master Grade)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
+
+# 2. RG (Real Grade)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
+
+# 3. PG (Perfect Grade)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
+
+# 4. HG - 수성의 마녀
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
+
+# 5. HG - SEED / FREEDOM / DESTINY
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=284,876,294&soldout=Y&endGoods=Y
+
+# 6. HG - 우주세기 클래식 (퍼스트, Z, ZZ, 역샤)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=280,301,300,281&soldout=Y&endGoods=Y
+
+# 7. HG - 우주세기 후기 (UC, NT, 하사웨이)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=282,780,283&soldout=Y&endGoods=Y
+
+# 8. HG - 비우주세기 인기작 (00, 철혈)
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=285,286,855&soldout=Y&endGoods=Y
+
+# 9. HG - 오리진 / 최신작
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
+
+# 10. HG - 빌드 시리즈 / 기타
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
