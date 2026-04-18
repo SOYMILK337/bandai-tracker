@@ -3,8 +3,9 @@ import requests
 import time
 import re
 from bs4 import BeautifulSoup
+import urllib.parse # 주소 암호화를 위해 추가
 
-print("🚀 [System] 그물망 파싱 엔진으로 긴급 교체!")
+print("🚀 [System] 주소 정밀 타격 엔진으로 업그레이드!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -32,13 +33,13 @@ def check_commands():
                 if "message" in update and "text" in update["message"]:
                     cmd = update["message"]["text"]
                     if cmd == "/상태":
-                        send_message(f"📊 [상태보고]\n🔄 {cycle_count}회차 감시 중\n📦 현재 인지 상품: {len(tracked_products)}개")
+                        send_message(f"📊 [상태보고]\n🔄 {cycle_count}회차 감시 중\n📦 누적 인지 상품: {len(tracked_products)}개")
                     elif cmd == "/추적상품확인":
                         if not tracked_products:
-                            send_message("아직 수집된 데이터가 없습니다.")
+                            send_message("아직 데이터가 없습니다.")
                             continue
                         names = sorted(tracked_products.values())
-                        send_message(f"📦 총 {len(names)}개 상품 감시 중")
+                        send_message(f"📦 총 {len(names)}개 상품 감시 중 (30개씩 전송)")
                         for i in range(0, len(names), 30):
                             chunk = names[i:i+30]
                             msg = [f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)]
@@ -48,35 +49,34 @@ def check_commands():
 
 def scan_target(session, url, new_items_list):
     try:
-        # PC 버전 헤더로 원복
+        # [핵심 수정] 주소를 통째로 암호화하여 프록시에 전달합니다.
+        # 이렇게 해야 'chkbrand' 같은 필터가 잘리지 않고 끝까지 전달됩니다.
+        encoded_url = urllib.parse.quote(url, safe='')
+        proxy_url = f"{GOOGLE_PROXY_URL}?url={encoded_url}"
+        
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-        proxy_url = f"{GOOGLE_PROXY_URL}?url={url}"
         response = session.get(proxy_url, headers=headers, timeout=30)
         
-        # [핵심] HTML 소스가 너무 짧으면(차단) 에러 처리
-        if len(response.text) < 1000:
-            print(f"⚠️ 페이지 로딩 실패 혹은 차단됨: {url}")
-            return 0
+        if len(response.text) < 1000: return 0
 
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # [그물망 로직] gno=숫자 형태의 모든 링크를 다 찾음
+        # gno=숫자 형태의 링크와 텍스트를 정밀하게 추출
         product_links = soup.find_all('a', href=re.compile(r'gno=\d+'))
         
-        found_count = 0
+        found_in_page = 0
         for link in product_links:
-            href = link.get_text(strip=True)
-            # 링크 텍스트가 너무 짧으면 상품명이 아닐 확률이 높으므로 건너뜀
-            if len(href) < 5: continue 
+            p_name = link.get_text(strip=True)
+            if len(p_name) < 5: continue # 너무 짧은 텍스트(장바구니 등) 제외
             
             p_id = link['href'].split('gno=')[-1].split('&')[0]
             if p_id not in tracked_products:
-                tracked_products[p_id] = href
-                new_items_list.append(href)
-                found_count += 1
-        return found_count
+                tracked_products[p_id] = p_name
+                new_items_list.append(p_name)
+                found_in_page += 1
+        
+        return found_in_page
     except Exception as e:
-        print(f"❌ 에러: {e}")
+        print(f"❌ 스캔 에러: {e}")
         return 0
 
 if __name__ == "__main__":
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         with open("list.txt", "r") as f:
             urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        send_message(f"🤖 PC 버전 그물망 감시 엔진 가동!")
+        send_message(f"🤖 정밀 타격 엔진 가동! (대상: {len(urls)}개 주소)")
         session = requests.Session()
         
         while True:
@@ -93,9 +93,11 @@ if __name__ == "__main__":
             
             for url in urls:
                 check_commands()
+                # 각 페이지별로 돌면서 신규 상품을 수집합니다.
                 scan_target(session, url, found_this_cycle)
-                time.sleep(3) # 안정성을 위해 3초 대기
+                time.sleep(3)
             
+            # 신규 상품 발견 시 30개 단위 보고
             if found_this_cycle:
                 for i in range(0, len(found_this_cycle), 30):
                     chunk = found_this_cycle[i:i+30]
