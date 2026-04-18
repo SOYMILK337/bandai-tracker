@@ -1,0 +1,25 @@
+name: Test Telegram Bot
+
+on:
+  workflow_dispatch: # 우리가 직접 '실행' 버튼을 누를 때만 작동하게 하는 설정
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest # 깃허브가 무료로 빌려주는 리눅스 컴퓨터를 사용합니다.
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v3 # 우리가 만든 main.py 파일을 서버로 복사해옵니다.
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 필요한 도구(requests) 설치
+        run: pip install requests # 인터넷 연결에 필요한 도구를 설치합니다.
+
+      - name: 프로그램 실행
+        env: # 금고에 넣어둔 비밀번호를 프로그램에 전달합니다.
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py # 드디어 main.py를 실행합니다!
