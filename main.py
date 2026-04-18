@@ -11,10 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 4계정 쿼드 하이퍼 엔진 풀-로드 가동!")
+print("🚀 [System] 4계정 쿼드 엔진 가속 최적화 완료! (24시간 무한 모드)")
 
 # ==========================================
-# ✅ 오용진 님이 주신 4개의 프록시 ID 세팅 완료!
+# ✅ 오용진 님의 4개 프록시 ID 완벽 세팅
 # ==========================================
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
@@ -68,7 +68,7 @@ def check_commands():
                 if cmd == "/상태":
                     msg = "📊 [8만건 하이퍼 엔진 상태]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
                     msg += "\n".join(["📍 " + str(l) + ": " + str(c) + "개" for l, c in category_counts.items()])
-                    send_message(msg + "\n\n📦 총 감시중: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 22초")
+                    send_message(msg + "\n\n📦 총합: " + str(len(known_in_stock_ids)) + "개\n⏱️ 주기: 약 21~22초")
                 elif cmd == "/추적상품확인":
                     if not current_tracked_names:
                         send_message("⏳ 데이터 수집 중입니다.")
@@ -126,7 +126,7 @@ if __name__ == "__main__":
             if line.startswith("#"): current_label = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 4계정 쿼드 하이퍼 엔진 가동! (22초 주기)")
+    send_message("🤖 4계정 통합 감시 출격! (안전 22초 주기 모드)")
     
     while True:
         if time.time() - start_time > 21000: restart_myself(); break
@@ -165,6 +165,9 @@ if __name__ == "__main__":
 
         known_in_stock_ids = current_ids
         current_tracked_names = cycle_data.copy()
-        for _ in range(2):
+        
+        # [수정 완료] 대기 시간을 14초로 늘려 안정성을 확보합니다.
+        # 2초마다 명령어를 확인하여 봇의 반응 속도를 유지합니다. (7번 반복 = 총 14초)
+        for _ in range(7):
             check_commands()
-            time.sleep(5)
+            time.sleep(2)
