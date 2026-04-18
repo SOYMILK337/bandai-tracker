@@ -2,15 +2,15 @@ import os
 import requests
 import time
 import re
+import json
 from bs4 import BeautifulSoup
 import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-# 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 가로 길이 축소 완료. 엔진 가동!")
+print("🚀 [System] 반다이 본진 + 네이버 듀얼 코어 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -51,7 +51,6 @@ def restart_myself():
         pass
 
 def clean_product_name(raw_name):
-    # 긴 정규식을 변수로 분리하여 줄바꿈 방지
     p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지'
     clean = re.sub(p, '', raw_name)
     return clean.strip()
@@ -81,8 +80,7 @@ def check_commands():
                 send_message("⏳ 첫 번째 정밀 스캔 중입니다.")
             else:
                 sum_text = [f"📍 {l}: {c}개" for l, c in category_counts.items()]
-                # 긴 문자열을 짧게 쪼개서 합침
-                msg1 = f"📊 [실시간 즉시 보고]\n🔄 현재 {cycle_count}회차\n"
+                msg1 = f"📊 [실시간 듀얼 보고]\n🔄 현재 {cycle_count}회차\n"
                 msg2 = "\n".join(sum_text)
                 msg3 = f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 시간: {last_check_time}"
                 send_message(msg1 + msg2 + msg3)
@@ -103,10 +101,8 @@ def scan_target_parallel(task):
     label = task['label']
     try:
         encoded_url = urllib.parse.quote(url, safe='')
-        # 에러가 났던 지점! 문자열이 잘리지 않도록 '+' 기호로 안전하게 연결
         proxy_url = GOOGLE_PROXY_URL + "?url=" + encoded_url
         
-        # User-Agent 길이 축소
         ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
         headers = {'User-Agent': ua}
         
@@ -116,15 +112,48 @@ def scan_target_parallel(task):
             return label, {}
         
         soup = BeautifulSoup(res.text, 'html.parser')
-        product_links = soup.find_all('a', href=re.compile(r'gno=\d+'))
-        
         local_data = {}
-        for link in product_links:
-            p_id = link['href'].split('gno=')[-1].split('&')[0]
-            raw_name = link.get_text(strip=True)
-            if len(raw_name) >= 10:
-                local_data[p_id] = clean_product_name(raw_name)
+        
+        # [핵심] 네이버 브랜드스토어 전용 탐색기
+        if "naver.com" in url:
+            links = soup.find_all('a', href=re.compile(r'/bandai/products/\d+'))
+            for link in links:
+                href = link.get('href')
+                if not href:
+                    continue
                 
+                # 본진 상품번호와 겹치지 않게 N_ 을 붙임
+                p_id = "N_" + href.split('/')[-1].split('?')[0]
+                
+                # 품절 여부 파악 (품절 글자가 있으면 무시)
+                if '품절' in link.get_text():
+                    continue
+                    
+                p_name = ""
+                dtl = link.get('data-shp-contents-dtl')
+                if dtl:
+                    try:
+                        dtl_data = json.loads(dtl)
+                        for item in dtl_data:
+                            if item.get('key') == 'chnl_prod_nm':
+                                p_name = item.get('value')
+                                break
+                    except:
+                        pass
+                        
+                if len(p_name) > 2:
+                    local_data[p_id] = clean_product_name(p_name)
+                    
+        # 기존 반다이 본진 탐색기
+        else:
+            links = soup.find_all('a', href=re.compile(r'gno=\d+'))
+            for link in links:
+                # 네이버와 겹치지 않게 B_ 를 붙임
+                p_id = "B_" + link['href'].split('gno=')[-1].split('&')[0]
+                raw_name = link.get_text(strip=True)
+                if len(raw_name) >= 10:
+                    local_data[p_id] = clean_product_name(raw_name)
+                    
         return label, local_data
     except:
         return label, {}
@@ -144,7 +173,7 @@ if __name__ == "__main__":
             elif line:
                 tasks.append({"url": line, "label": current_label})
     
-    send_message("🤖 듀얼 병렬 감시 시스템 가동!")
+    send_message("🤖 반다이 본진 + 네이버 듀얼 병렬 감시 시스템 가동!")
     session = requests.Session()
     
     while True:
