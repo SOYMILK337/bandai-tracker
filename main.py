@@ -6,41 +6,37 @@ import json
 from bs4 import BeautifulSoup
 import urllib.parse
 from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
-# 시작 시각 및 한국 표준시 설정
+# 1. 시스템 설정 및 환경변수
 start_time = time.time()
 KST = timezone(timedelta(hours=9))
 
-# ✅ 사이클 시간 측정을 위한 변수 초기화
-last_cycle_finish_time = time.time()
-measured_cycle_time = 0 # 실제 측정된 주기
-
-print("🚀 [System] 주기 측정 엔진 탑재 완료! 실시간 성능 보고를 시작합니다.")
-
-# ==========================================
-# 프록시 ID 세팅
-# ==========================================
+# ✅ 오용진 님의 4개 프록시 ID (10만 건 증설 전 최상위 사양)
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
     "AKfycbwUJTb02XOUbV-obvpE7WXRdDn9AxJl5H-KWb-kRxCVqQ3AJpkuBFokAoxwkhp_gWXB",
     "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw"
 ]
-# ==========================================
 
-proxy_index = 0
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
+# 2. 공유 자원 및 락(Lock) 설정
 known_in_stock_ids = set()
 item_to_label = {}
 all_seen_names = {}
 last_bnkr_time, last_naver_time = "대기 중", "대기 중"
+category_counts = {}
 cycle_count = 0
 last_update_id = -1
+measured_cycle_time = 0
+avg_scan_time = 0 
+lock = threading.Lock()
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -64,132 +60,132 @@ def check_commands():
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.5}, timeout=5)
         response = res.json()
-        if not response or not response.get("ok"): return
-        for update in response["result"]:
-            last_update_id = update["update_id"]
-            if "message" in update and "text" in update["message"]:
-                cmd = update["message"]["text"]
-                if cmd == "/상태":
-                    msg = "📊 [정밀 사이클 분석 리포트]\n✅ 본진: " + last_bnkr_time + "\n✅ 네이버: " + last_naver_time + "\n\n"
-                    msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                    # ✅ 측정된 실제 주기를 소수점 첫째자리까지 표시
-                    cycle_info = f"{measured_cycle_time:.1f}초" if measured_cycle_time > 0 else "측정 중..."
-                    send_message(msg + f"\n\n📦 총합: {len(known_in_stock_ids)}개\n⏱️ 직전 사이클 소요: {cycle_info}")
+        if response.get("ok"):
+            for update in response["result"]:
+                last_update_id = update["update_id"]
+                if "message" in update and "text" in update["message"]:
+                    if update["message"]["text"] == "/상태":
+                        with lock:
+                            msg = f"📊 [무결점 하이퍼 엔진 V2]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
+                            msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초"
+                            msg += f"\n⏱️ 주소당 평균: {avg_scan_time:.2f}초"
+                            msg += f"\n📦 현재 재고: {len(known_in_stock_ids)}개"
+                        send_message(msg)
     except: pass
 
-def scan_target_parallel(task):
+proxy_index = 0
+def scan_task(task):
     global proxy_index
     url, label = task['url'], task['label']
-    for attempt in range(2):
+    task_start = time.time()
+    
+    for _ in range(2): # 고스트 방지: 최대 2회 재시도
         try:
-            current_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]
-            proxy_index += 1
-            proxy_url = f"https://script.google.com/macros/s/{current_id}/exec?url=" + urllib.parse.quote(url, safe='')
+            with lock:
+                curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]
+                proxy_index += 1
+            proxy_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0 Chrome/120.0.0'}, timeout=25)
-            if len(res.text) < 1000:
-                time.sleep(1); continue
+            if len(res.text) < 1000: continue
             
             soup = BeautifulSoup(res.text, 'html.parser')
-            local_data = {}
+            data = {}
             if "naver.com" in url:
                 links = soup.find_all('a', href=re.compile(r'/bandai/products/\d+'))
                 for link in links:
-                    if not link.get('href') or '품절' in link.get_text(): continue
+                    if '품절' in link.get_text(): continue
                     p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
                     attr = link.get('data-shp-contents-dtl')
                     if attr:
                         try:
                             for item in json.loads(attr):
                                 if item.get('key') == 'chnl_prod_nm':
-                                    local_data[p_id] = clean_product_name(item.get('value')); break
+                                    data[p_id] = clean_product_name(item.get('value')); break
                         except: pass
             else:
                 links = soup.find_all('a', href=re.compile(r'gno=\d+'))
                 for link in links:
                     p_id = "B_" + link['href'].split('gno=')[-1].split('&')[0]
                     if len(link.get_text(strip=True)) >= 10:
-                        local_data[p_id] = clean_product_name(link.get_text(strip=True))
-            return label, local_data, url, True
-        except:
-            time.sleep(1); continue
-    return label, {}, url, False
+                        data[p_id] = clean_product_name(link.get_text(strip=True))
+            
+            return label, data, url, True, time.time() - task_start
+        except: continue
+    return label, {}, url, False, time.time() - task_start
 
 if __name__ == "__main__":
     tasks = []
-    current_label = "기타"
     with open("list.txt", "r") as f:
+        lbl = "기타"
         for line in f:
             line = line.strip()
-            if line.startswith("#"): current_label = line.replace("#", "").strip()
-            elif line: tasks.append({"url": line, "label": current_label})
-    
-    send_message("🤖 주기 측정 엔진 탑재 완료! 실시간 성능을 모니터링합니다.")
-    
+            if line.startswith("#"): lbl = line.replace("#", "").strip()
+            elif line: tasks.append({"url": line, "label": lbl})
+
+    send_message("🚨 [엔진 가동] 실시간 스트리밍 및 골든타임 보호 모드 시작")
+
     while True:
-        # 사이클 시작 시각 기록
-        cycle_start_marker = time.time()
-        
+        cycle_start = time.time()
         now_kst = datetime.now(KST)
         curr_hm = now_kst.hour * 100 + now_kst.minute
-        elapsed_from_start = time.time() - start_time
-        
-        # 골든타임 리셋 로직
-        if 1435 <= curr_hm <= 1445 and elapsed_from_start > 3600: restart_myself(); break
-        if elapsed_from_start > 21000:
+        elapsed_from_boot = time.time() - start_time
+
+        # ✅ 골든타임 보호 로직 (14:50-16:15 리셋 금지)
+        if 1435 <= curr_hm <= 1445 and elapsed_from_boot > 3600: restart_myself(); break
+        if elapsed_from_boot > 21000:
             if not (1450 <= curr_hm <= 1615): restart_myself(); break
-            elif elapsed_from_start > 21300: restart_myself(); break
+            elif elapsed_from_boot > 21300: restart_myself(); break
 
         cycle_count += 1
-        with ThreadPoolExecutor(max_workers=20) as ex:
-            results = list(ex.map(scan_target_parallel, tasks))
-        
-        now_str = datetime.now(KST).strftime('%H:%M:%S')
-        cycle_data, category_counts = {}, {}
+        current_cycle_ids = set()
         success_labels = set()
-        filtered_gone_ids = []
+        durations = []
         
-        for label, data, url, is_success in results:
-            if is_success:
-                cycle_data.update(data)
-                success_labels.add(label)
-                category_counts[label] = category_counts.get(label, 0) + len(data)
-                for pid in data: 
-                    item_to_label[pid] = label
-                    all_seen_names[pid] = data[pid]
-                if "naver.com" in url: last_naver_time = now_str
-                else: last_bnkr_time = now_str
-        
-        current_ids = set(cycle_data.keys())
-        event_time = datetime.now(KST).strftime('%H:%M:%S')
-
-        if cycle_count > 1:
-            # 신규 포착
-            new_ids = current_ids - known_in_stock_ids
-            if new_ids:
-                new_list = [("[네이버] " if pid.startswith("N_") else "[본진] ") + cycle_data[pid] for pid in new_ids]
-                for i in range(0, len(new_list), 30):
-                    send_message(f"🚨 [신규/재입고 포착] ({event_time})\n" + "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(new_list[i:i+30])]))
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             
-            # 품절 포착
-            gone_ids = known_in_stock_ids - current_ids
-            filtered_gone_ids = [pid for pid in gone_ids if item_to_label.get(pid) in success_labels]
+            for future in as_completed(future_to_url):
+                label, data, url, is_success, task_dur = future.result()
+                durations.append(task_dur)
+                
+                if is_success:
+                    with lock:
+                        now_str = datetime.now(KST).strftime('%H:%M:%S')
+                        if "naver.com" in url: last_naver_time = now_str
+                        else: last_bnkr_time = now_str
+                        
+                        # 🚀 실시간 신규/재입고 알림
+                        new_items = set(data.keys()) - known_in_stock_ids
+                        if cycle_count > 1 and new_items:
+                            alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]}" for pid in new_items]
+                            send_message(f"🚨 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
+                        
+                        known_in_stock_ids.update(data.keys())
+                        current_cycle_ids.update(data.keys())
+                        all_seen_names.update(data)
+                        success_labels.add(label)
+                        for pid in data: item_to_label[pid] = label
+
+        # 사이클 종료 후 데이터 정리 및 품절 알림
+        with lock:
+            if durations: avg_scan_time = sum(durations) / len(durations)
             
-            if filtered_gone_ids:
-                gone_list = [("[네이버] " if pid.startswith("N_") else "[본진] ") + all_seen_names[pid] for pid in filtered_gone_ids]
-                for i in range(0, len(gone_list), 30):
-                    send_message(f"🗑️ [품절 포착] ({event_time})\n" + "\n".join([f"{idx+1}. {n}" for idx, n in enumerate(gone_list[i:i+30])]))
+            if cycle_count > 1:
+                gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_to_label.get(pid) in success_labels]
+                if gone_ids:
+                    gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{all_seen_names[pid]}" for pid in gone_ids]
+                    send_message(f"🗑️ 품절 포착 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list))
+                    for pid in gone_ids: known_in_stock_ids.discard(pid)
+            
+            category_counts = {l: 0 for l in set(t['label'] for t in tasks)}
+            for pid in known_in_stock_ids:
+                lbl = item_to_label.get(pid, "기타")
+                category_counts[lbl] = category_counts.get(lbl, 0) + 1
 
-        # 메모리 업데이트
-        if cycle_count == 1:
-            known_in_stock_ids = current_ids
-        else:
-            for pid in current_ids: known_in_stock_ids.add(pid)
-            for pid in filtered_gone_ids: known_in_stock_ids.discard(pid)
-
-        # 14초 대기 (2초마다 명령어 체크)
-        for _ in range(7):
+        # 🕒 26-27초 주기를 위한 정밀 대기 (11초)
+        for _ in range(5):
             check_commands()
-            time.sleep(2)
-
-        # ✅ 한 사이클 완료 후 소요 시간 계산
-        measured_cycle_time = time.time() - cycle_start_marker
+            time.sleep(2.2)
+        
+        measured_cycle_time = time.time() - cycle_start
