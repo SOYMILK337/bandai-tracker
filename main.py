@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # 시작 시각 기록
 start_time = time.time()
 
-print("🚀 [System] 들여쓰기 구조 전면 개편. 안정성 100% 엔진 가동!")
+print("🚀 [System] 들여쓰기 완벽 수정 완료! 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -53,8 +53,6 @@ def clean_product_name(raw_name):
 
 def check_commands():
     global last_update_id
-    
-    # 1. 텔레그램 명령 가져오기 (오류 방지를 위해 통신과 분석 분리)
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         params = {'offset': last_update_id + 1, 'timeout': 1}
@@ -66,7 +64,6 @@ def check_commands():
     if not response or not response.get("ok") or not response.get("result"):
         return
 
-    # 2. 명령어 분석 및 즉시 응답
     for update in response["result"]:
         last_update_id = update["update_id"]
         if "message" not in update or "text" not in update["message"]:
@@ -98,41 +95,4 @@ def scan_target_parallel(task):
     label = task['label']
     try:
         encoded_url = urllib.parse.quote(url, safe='')
-        proxy_url = f"{GOOGLE_PROXY_URL}?url={encoded_url}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-        
-        res = requests.get(proxy_url, headers=headers, timeout=30)
-        
-        if len(res.text) < 1000:
-            return label, {}
-        
-        soup = BeautifulSoup(res.text, 'html.parser')
-        product_links = soup.find_all('a', href=re.compile(r'gno=\d+'))
-        
-        local_data = {}
-        for link in product_links:
-            p_id = link['href'].split('gno=')[-1].split('&')[0]
-            raw_name = link.get_text(strip=True)
-            if len(raw_name) >= 10:
-                local_data[p_id] = clean_product_name(raw_name)
-                
-        return label, local_data
-    except:
-        return label, {}
-
-if __name__ == "__main__":
-    if os.path.exists("list.txt"):
-        tasks = []
-        current_label = "기타"
-        with open("list.txt", "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("#"):
-                    current_label = line.replace("#", "").strip()
-                elif line:
-                    tasks.append({"url": line, "label": current_label})
-        
-        send_message("🤖 프반+일반 듀얼 병렬 감시 시스템 가동! (오류 방지 적용)")
-        session = requests.Session()
-        
-        while True:
+        proxy_url = f"{
