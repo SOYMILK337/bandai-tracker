@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 
-print("🚀 [System] 즉시 응답형 엔진으로 업그레이드 완료!")
+print("🚀 [System] 그물망 파싱 엔진으로 긴급 교체!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -13,7 +13,6 @@ GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80d
 tracked_products = {} 
 cycle_count = 0
 last_update_id = -1
-# report_requested 변수는 이제 필요 없어서 삭제합니다.
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -22,7 +21,6 @@ def send_message(text):
     except: pass
 
 def check_commands():
-    """명령어를 확인하는 즉시 응답합니다."""
     global last_update_id
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
@@ -33,26 +31,16 @@ def check_commands():
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"]:
                     cmd = update["message"]["text"]
-                    
-                    # [수정] 기다리지 않고 즉시 응답!
                     if cmd == "/상태":
-                        status_msg = (
-                            f"📊 [실시간 봇 상태]\n"
-                            f"🔄 현재 {cycle_count}회차 감시 중\n"
-                            f"📦 인지 중인 총 상품: {len(tracked_products)}개\n"
-                            f"⏱️ 마지막 확인: 방금 전"
-                        )
-                        send_message(status_msg)
-                        
+                        send_message(f"📊 [상태보고]\n🔄 {cycle_count}회차 감시 중\n📦 현재 인지 상품: {len(tracked_products)}개")
                     elif cmd == "/추적상품확인":
                         if not tracked_products:
                             send_message("아직 수집된 데이터가 없습니다.")
                             continue
-                        sorted_names = sorted(tracked_products.values())
-                        total = len(sorted_names)
-                        send_message(f"📦 총 {total}개 상품 감시 중 (30개씩 전송)")
-                        for i in range(0, total, 30):
-                            chunk = sorted_names[i:i+30]
+                        names = sorted(tracked_products.values())
+                        send_message(f"📦 총 {len(names)}개 상품 감시 중")
+                        for i in range(0, len(names), 30):
+                            chunk = names[i:i+30]
                             msg = [f"{i+idx+1}. {name}" for idx, name in enumerate(chunk)]
                             send_message(f"📋 [목록 {i//30 + 1}]\n" + "\n".join(msg))
                             time.sleep(0.5)
@@ -60,36 +48,43 @@ def check_commands():
 
 def scan_target(session, url, new_items_list):
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
-        }
+        # PC 버전 헤더로 원복
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         proxy_url = f"{GOOGLE_PROXY_URL}?url={url}"
         response = session.get(proxy_url, headers=headers, timeout=30)
+        
+        # [핵심] HTML 소스가 너무 짧으면(차단) 에러 처리
+        if len(response.text) < 1000:
+            print(f"⚠️ 페이지 로딩 실패 혹은 차단됨: {url}")
+            return 0
+
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        items = soup.find_all('li') + soup.find_all('div', class_=re.compile(r'item|goods'))
+        # [그물망 로직] gno=숫자 형태의 모든 링크를 다 찾음
+        product_links = soup.find_all('a', href=re.compile(r'gno=\d+'))
+        
         found_count = 0
-        for item in items:
-            link_tag = item.find('a', href=re.compile(r'gno='))
-            if not link_tag: continue
+        for link in product_links:
+            href = link.get_text(strip=True)
+            # 링크 텍스트가 너무 짧으면 상품명이 아닐 확률이 높으므로 건너뜀
+            if len(href) < 5: continue 
             
-            p_id = link_tag['href'].split('gno=')[-1].split('&')[0]
+            p_id = link['href'].split('gno=')[-1].split('&')[0]
             if p_id not in tracked_products:
-                name_tag = item.find('p', class_='name') or item.find('div', class_='name') or item.find('h5') or item.find('span', class_='tit')
-                p_name = name_tag.get_text(strip=True) if name_tag else "이름 없는 상품"
-                
-                tracked_products[p_id] = p_name
-                new_items_list.append(p_name)
+                tracked_products[p_id] = href
+                new_items_list.append(href)
                 found_count += 1
         return found_count
-    except: return 0
+    except Exception as e:
+        print(f"❌ 에러: {e}")
+        return 0
 
 if __name__ == "__main__":
     if os.path.exists("list.txt"):
         with open("list.txt", "r") as f:
             urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        send_message(f"🤖 감시 엔진 가동! (응답 속도 개선 버전)")
+        send_message(f"🤖 PC 버전 그물망 감시 엔진 가동!")
         session = requests.Session()
         
         while True:
@@ -97,10 +92,9 @@ if __name__ == "__main__":
             found_this_cycle = [] 
             
             for url in urls:
-                check_commands() # 여기서 명령어를 체크할 때 바로 답장을 보냅니다!
+                check_commands()
                 scan_target(session, url, found_this_cycle)
-                # [수정] 대기 시간을 5초에서 2초로 줄여 회전 속도를 높입니다.
-                time.sleep(2)
+                time.sleep(3) # 안정성을 위해 3초 대기
             
             if found_this_cycle:
                 for i in range(0, len(found_this_cycle), 30):
@@ -109,9 +103,7 @@ if __name__ == "__main__":
                     send_message(f"🚨 [신규 포착]\n" + "\n".join(msg))
                     time.sleep(0.5)
             
-            # 메인 루프 끝날 때까지 기다리지 않아도 되므로 하단 report 로직 삭제
-            
             print(f"⏳ {cycle_count}회차 완료. 누적 {len(tracked_products)}개.")
-            for _ in range(20): # 휴식 시간을 조금 줄임
+            for _ in range(30):
                 check_commands()
                 time.sleep(1)
