@@ -1,34 +1,32 @@
 name: bnkrmall-bot
 
 on:
-  push:
-    branches: [ "main" ]
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *' # 안전장치 (릴레이 실패 시 대비)
+  repository_dispatch:
+    types: [restart_bot] # 봇이 보낸 신호를 감지
   workflow_dispatch:
+
+concurrency:
+  group: bnkrmall-monitor
+  cancel-in-progress: false # 중요: 다음 봇이 뜰 때 현재 봇을 바로 끄지 않음
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
-    # [수정] Node 24 강제 사용 및 환경 변수 설정
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      MY_GITHUB_PAT: ${{ secrets.MY_GITHUB_PAT }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
       - name: Install dependencies
         run: pip install requests beautifulsoup4
-
       - name: Run bot
-        # [수정] 로그를 더 자세히 보기 위해 출력 버퍼링을 끕니다.
         run: python -u main.py
