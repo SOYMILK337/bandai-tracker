@@ -4,18 +4,13 @@ import time
 import re
 from bs4 import BeautifulSoup
 
-# [진단] 봇 엔진 가동
-print("🚀 [System] 봇 엔진 가동 시작!")
+print("🚀 [System] 신규 상품 출현 감지 엔진 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR/exec"
 
-if not token or not chat_id:
-    print("❌ [Error] 텔레그램 설정값(Secrets)이 비어있습니다!")
-    exit()
-
-tracked_products = {}
+tracked_products = set() # 상품 ID만 추적 (존재 여부 확인용)
 cycle_count = 0
 last_update_id = -1
 report_requested = False
@@ -23,9 +18,7 @@ report_requested = False
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {'chat_id': chat_id, 'text': text}
-    try:
-        r = requests.post(url, data=payload)
-        print(f"📡 [Telegram] 메시지 전송 상태: {r.status_code}")
+    try: requests.post(url, data=payload)
     except: pass
 
 def check_commands():
@@ -38,40 +31,22 @@ def check_commands():
             for update in response["result"]:
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"]:
-                    user_text = update["message"]["text"]
-                    
-                    if user_text == "/상태":
+                    cmd = update["message"]["text"]
+                    if cmd == "/상태":
                         report_requested = True
-                        send_message("🔍 명령 확인! 이번 사이클이 끝난 후 보고서를 제출하겠습니다.")
-                    
-                    elif user_text == "/추적상품확인":
-                        if not tracked_products:
-                            send_message("아직 수집된 상품이 없습니다. 잠시만 기다려 주세요!")
-                            continue
-                        
-                        product_list = [f"{i+1}. {p['name']} ({p['status']})" for i, p in enumerate(tracked_products.values())]
-                        total = len(product_list)
-                        send_message(f"📦 현재 총 {total}개 상품을 관리 중입니다.")
-                        
-                        for i in range(0, total, 30):
-                            send_message(f"📋 [리스트 {i//30 + 1}]\n" + "\n".join(product_list[i:i+30]))
-                            time.sleep(0.5)
+                        send_message("🔍 현재 실시간 재고를 스캔 중입니다.")
+                    elif cmd == "/추적상품확인":
+                        send_message(f"📦 현재 총 {len(tracked_products)}개의 상품이 리스트에 노출되어 있습니다.")
     except: pass
 
-def scan_page(session, target_url, prev_url):
+def scan_target(session, url):
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': prev_url
-        }
-        proxy_url = f"{GOOGLE_PROXY_URL}?url={target_url}"
-        response = session.get(proxy_url, headers=headers, timeout=30)
+        proxy_url = f"{GOOGLE_PROXY_URL}?url={url}"
+        response = session.get(proxy_url, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 주인님의 필터 링크 전용 상품 추출 (li 태그 기반)
         items = soup.select('.main-product-tab-goods > li') or soup.find_all('li', attrs={'data-childno': True})
-        found_in_page = 0
         
+        new_items_found = 0
         for item in items:
             link_tag = item.find('a', href=re.compile(r'gno='))
             if not link_tag: continue
@@ -81,49 +56,40 @@ def scan_page(session, target_url, prev_url):
             p_name = name_tag.get_text(strip=True) if name_tag else "상품명 미상"
             p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}" if link_tag['href'].startswith('/') else link_tag['href']
 
-            is_sold_out = "sold_out" in str(item).lower() or "품절" in item.get_text()
-            current_status = "품절" if is_sold_out else "재고있음"
-            
-            if p_id in tracked_products:
-                if tracked_products[p_id]['status'] == "품절" and current_status == "재고있음":
-                    send_message(f"🚨 [입고 알림!]\n📦 {p_name}\n🔗 {p_url}")
-            
-            tracked_products[p_id] = {"name": p_name, "status": current_status}
-            found_in_page += 1
-            
-        return found_in_page
-    except:
-        return 0
+            # 핵심 로직: 기존 리스트에 없던 상품이 나타났는가?
+            if p_id not in tracked_products:
+                # 1회차는 데이터 수집만 하고, 2회차(진짜 감시)부터 알림 전송
+                if cycle_count > 1:
+                    send_message(f"🚨 [재입고/신규 포착!]\n📦 {p_name}\n🔗 {p_url}")
+                
+                tracked_products.add(p_id)
+                new_items_found += 1
+                
+        return len(items)
+    except: return 0
 
 if __name__ == "__main__":
     if os.path.exists("list.txt"):
         with open("list.txt", "r") as f:
-            urls = [line.strip() for line in f.readlines() if line.strip()]
+            urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        print(f"✅ [System] 감시 시작! 대상 페이지: {len(urls)}개")
-        send_message(f"🤖 정밀 감시 가동 시작! (대상: {len(urls)}개 페이지)")
-        
+        send_message(f"🤖 실시간 재고 감시 시작! (1회차는 데이터 수집 모드)")
         session = requests.Session()
         
         while True:
             cycle_count += 1
-            items_this_cycle = 0 # 변수명 통일 완료!
-            referer = "https://www.bnkrmall.co.kr/"
+            total_visible = 0
             
             for url in urls:
                 check_commands()
-                count = scan_page(session, url, referer)
-                items_this_cycle += count # 여기서 에러가 났던 부분을 수정했습니다.
-                referer = url
+                total_visible += scan_target(session, url)
                 time.sleep(5)
             
             if report_requested:
-                send_message(f"📋 [보고] {cycle_count}회차 완료\n📦 이번 회차 확인: {items_this_cycle}개\n🗃️ 총 관리 상품: {len(tracked_products)}개")
+                send_message(f"📋 [감시 보고]\n🔄 {cycle_count}회차 완료\n📦 현재 구매 가능 상품: {total_visible}개\n✨ 신규 상품이 나타나면 즉시 알려드릴게요!")
                 report_requested = False
             
-            print(f"⏳ {cycle_count}회차 완료. 누적 {len(tracked_products)}개.")
-            for _ in range(30): # 30초 대기 중에도 명령어 체크
+            print(f"⏳ {cycle_count}회차 완료. 현재 {len(tracked_products)}개 상품 인지 중.")
+            for _ in range(30):
                 check_commands()
                 time.sleep(1)
-    else:
-        print("❌ [Fatal] list.txt 파일이 없습니다!")
