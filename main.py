@@ -16,42 +16,45 @@ def send_message(text):
 
 def check_stock(target_url):
     try:
-        # 구글 대리인을 통해 우회 접속
         proxy_url = f"{GOOGLE_PROXY_URL}?url={target_url}"
         response = requests.get(proxy_url, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # [1] 상품명 추출
-        # 반다이몰의 상품명 태그를 우선 찾고, 없으면 페이지 제목을 사용합니다.
-        name_tag = soup.find('p', class_='prod_name') or soup.find('div', class_='goods_name')
-        if name_tag:
-            product_name = name_tag.get_text(strip=True)
-        else:
-            product_name = soup.title.string.split('|')[0].strip() if soup.title else "알 수 없는 상품"
+        # [상품명 찾기 3중 필터]
+        product_name = "이름 확인 불가"
+        
+        # 1순위: 공유용 메타 데이터(og:title) - 가장 정확함
+        og_title = soup.find("meta", property="og:title")
+        if og_title and og_title.get("content"):
+            product_name = og_title["content"].split('|')[0].strip()
+        
+        # 2순위: 메타 데이터 실패 시 기존 이름표 찾기
+        if product_name == "이름 확인 불가" or product_name == "상품상세":
+            name_tag = soup.find('p', class_='prod_name') or soup.find('div', class_='goods_name')
+            if name_tag:
+                product_name = name_tag.get_text(strip=True)
+                
+        # 3순위: 최후의 수단 (제목 태그)
+        if product_name == "이름 확인 불가" or product_name == "상품상세":
+            product_name = soup.title.string.split('|')[0].strip() if soup.title else "상품 정보 없음"
 
-        # [2] 정밀 재고 판정
-        # HTML 코드 전체를 소문자로 변환해서 검사합니다.
+        # [재고 판정]
         page_html = response.text.lower()
-        
-        # 구매 관련 버튼 클래스가 있는지 확인 (PC/모바일 공통)
-        has_buy_button = any(btn in page_html for btn in ['btn_buy', 'btn_cart', 'cart_btn', 'btn_reservation'])
-        
-        # 확실한 품절 신호가 있는지 확인
-        has_soldout_signal = any(sign in page_html for sign in ['btn_soldout', 'sold_out', 'stock_out', '품절'])
+        # 구매/장바구니/예약 버튼이 있는지 확인
+        has_buy_button = any(btn in page_html for btn in ['btn_buy', 'btn_cart', 'cart_btn', 'btn_reservation', 'buy_now'])
+        # 품절 마크가 있는지 확인
+        has_soldout_signal = any(sign in page_html for sign in ['btn_soldout', 'sold_out', 'stock_out'])
 
-        # [3] 최종 결과 도출
-        # 구매 버튼이 존재하고, 품절 신호가 '구매 버튼'보다 작거나 없을 때 재입고로 판단
-        if has_buy_button and not ("btn_soldout" in page_html or "sold_out" in page_html):
-            # '품절' 글자가 본문에 있어도 '구매하기' 버튼 클래스가 살아있으면 재입고 가능성이 높음
-            return f"✅ [{product_name}]\n재입고 완료!! 지금 바로 접속하세요!"
+        if has_buy_button and not has_soldout_signal:
+            return f"✅ [{product_name}]\n재입고 완료!! 지금 지르세요!"
         else:
             return f"❌ [{product_name}]\n현재 품절 상태입니다."
 
     except Exception as e:
-        return f"⚠️ 접속 오류 발생: {e}"
+        return f"⚠️ 접속 오류: {e}"
 
 if __name__ == "__main__":
-    # 테스트 대상: HG 구스타프 칼 (현재 품절 상품)
+    # 테스트 대상: HG 구스타프 칼
     target_url = "https://www.bnkrmall.co.kr/goods/detail.do?gno=91246553"
     
     result = check_stock(target_url)
