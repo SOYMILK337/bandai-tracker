@@ -4,13 +4,13 @@ import time
 import re
 from bs4 import BeautifulSoup
 
-print("🚀 [System] 신규 상품 출현 감지 엔진 가동!")
+print("🚀 [System] 즉시 보고 모드 가동!")
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 GOOGLE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR/exec"
 
-tracked_products = set() # 상품 ID만 추적 (존재 여부 확인용)
+tracked_products = set() 
 cycle_count = 0
 last_update_id = -1
 report_requested = False
@@ -34,9 +34,9 @@ def check_commands():
                     cmd = update["message"]["text"]
                     if cmd == "/상태":
                         report_requested = True
-                        send_message("🔍 현재 실시간 재고를 스캔 중입니다.")
+                        send_message("🔍 현재 판매 중인 모든 상품을 정밀 스캔 중입니다.")
                     elif cmd == "/추적상품확인":
-                        send_message(f"📦 현재 총 {len(tracked_products)}개의 상품이 리스트에 노출되어 있습니다.")
+                        send_message(f"📦 현재 {len(tracked_products)}개의 상품이 목록에 노출되어 있습니다.")
     except: pass
 
 def scan_target(session, url):
@@ -46,7 +46,6 @@ def scan_target(session, url):
         soup = BeautifulSoup(response.text, 'html.parser')
         items = soup.select('.main-product-tab-goods > li') or soup.find_all('li', attrs={'data-childno': True})
         
-        new_items_found = 0
         for item in items:
             link_tag = item.find('a', href=re.compile(r'gno='))
             if not link_tag: continue
@@ -56,14 +55,10 @@ def scan_target(session, url):
             p_name = name_tag.get_text(strip=True) if name_tag else "상품명 미상"
             p_url = f"https://www.bnkrmall.co.kr{link_tag['href']}" if link_tag['href'].startswith('/') else link_tag['href']
 
-            # 핵심 로직: 기존 리스트에 없던 상품이 나타났는가?
+            # 핵심: 인지되지 않은 상품이면 무조건 즉시 알림
             if p_id not in tracked_products:
-                # 1회차는 데이터 수집만 하고, 2회차(진짜 감시)부터 알림 전송
-                if cycle_count > 1:
-                    send_message(f"🚨 [재입고/신규 포착!]\n📦 {p_name}\n🔗 {p_url}")
-                
+                send_message(f"🚨 [상품 포착!]\n📦 {p_name}\n🔗 {p_url}")
                 tracked_products.add(p_id)
-                new_items_found += 1
                 
         return len(items)
     except: return 0
@@ -73,7 +68,7 @@ if __name__ == "__main__":
         with open("list.txt", "r") as f:
             urls = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
         
-        send_message(f"🤖 실시간 재고 감시 시작! (1회차는 데이터 수집 모드)")
+        send_message(f"🤖 실시간 재고 추적기 가동! (즉시 보고 모드)")
         session = requests.Session()
         
         while True:
@@ -86,10 +81,10 @@ if __name__ == "__main__":
                 time.sleep(5)
             
             if report_requested:
-                send_message(f"📋 [감시 보고]\n🔄 {cycle_count}회차 완료\n📦 현재 구매 가능 상품: {total_visible}개\n✨ 신규 상품이 나타나면 즉시 알려드릴게요!")
+                send_message(f"📋 [감시 보고]\n🔄 {cycle_count}회차 완료\n📦 현재 확인된 구매 가능 상품: {total_visible}개\n✨ 신규 상품 포착 시 즉시 보고드립니다!")
                 report_requested = False
             
-            print(f"⏳ {cycle_count}회차 완료. 현재 {len(tracked_products)}개 상품 인지 중.")
+            print(f"⏳ {cycle_count}회차 완료. 현재 {len(tracked_products)}개 기체 인지 중.")
             for _ in range(30):
                 check_commands()
                 time.sleep(1)
