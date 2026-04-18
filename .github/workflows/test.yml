@@ -1,25 +1,30 @@
 name: Test Telegram Bot
 
 on:
-  workflow_dispatch: # 수동 실행 버튼
+  workflow_dispatch: # 우리가 직접 실행 버튼을 누를 때 작동합니다.
 
 jobs:
   run-bot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # 깃허브 서버의 최신 리눅스 환경을 사용합니다.
     steps:
       - name: 코드 가져오기
-        uses: actions/checkout@v4 # 최신 버전으로 변경
+        uses: actions/checkout@v4
 
       - name: 파이썬 설치
-        uses: actions/setup-python@v5 # 최신 버전으로 변경
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 필요한 도구 설치
-        run: pip install requests beautifulsoup4 cloudscraper # 크롤링 도구 추가 설치
+        # curl_cffi: 크롬 지문을 복제하는 최강 우회 도구
+        # beautifulsoup4: 웹사이트 내용을 분석하는 도구
+        run: |
+          pip install --upgrade pip
+          pip install curl_cffi beautifulsoup4
 
       - name: 프로그램 실행
         env:
+          # 금고(Secrets)에 저장한 값을 프로그램에 전달합니다.
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
