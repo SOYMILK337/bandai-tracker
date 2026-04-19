@@ -73,7 +73,7 @@ def check_commands():
                 if "message" in update and "text" in update["message"]:
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [마스터피스 V2.8 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg = f"📊 [마스터피스 V2.9 - 19s 궁극 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
                             msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초 (실측 타겟: 19s)"
                             msg += f"\n⏱️ 주소당 평균: {avg_scan_time:.2f}초"
@@ -138,17 +138,30 @@ def scan_task(task):
                 # 본진 + 프리미엄 반다이(pno) 레이더
                 links = soup.find_all('a', href=re.compile(r'(gno|pno)=\d+'))
                 for link in links:
+                    # 1. 품절 검사용: 포장지 전체 텍스트 읽기
                     text = link.get_text(strip=True)
                     text_lower = text.lower()
                     
-                    # SOLD OUT, 예약종료 필터링
-                    if 'sold out' in text_lower or '예약종료' in text or '품절' in text: continue
+                    # SOLD OUT, 예약종료 완벽 차단
+                    if 'sold out' in text_lower or '예약종료' in text or '품절' in text: 
+                        continue
                     
                     href = link.get('href')
-                    if 'gno=' in href: p_id = "B_" + href.split('gno=')[-1].split('&')[0]
-                    else: p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
+                    if 'gno=' in href: 
+                        p_id = "B_" + href.split('gno=')[-1].split('&')[0]
+                    else: 
+                        p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
                     
-                    if len(text) >= 5: data[p_id] = clean_product_name(text)
+                    # 🚨 [핀셋 패치] 작품명 떼어내고 <h5> 태그 안의 진짜 상품명만 추출
+                    name_tag = link.find('h5')
+                    if name_tag:
+                        pure_name = name_tag.get_text(strip=True)
+                    else:
+                        pure_name = text  
+                    
+                    # 기준을 3글자로 낮춰서 짧은 이름의 킷 생존 보장
+                    if len(pure_name) >= 3:  
+                        data[p_id] = clean_product_name(pure_name)
             
             return label, data, url, True, time.time() - task_start
         except: continue
@@ -163,7 +176,7 @@ if __name__ == "__main__":
             if line.startswith("#"): lbl = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": lbl})
 
-    send_message("🟢 [마스터피스 V2.8] 엔진 가동. 진품 인증 및 불도저 방어막이 활성화되었습니다.")
+    send_message("🟢 [마스터피스 V2.9] 엔진 가동. 진품 인증, 불도저, 핀셋 추출 방어막이 모두 활성화되었습니다.")
 
     while True:
         cycle_start = time.time()
