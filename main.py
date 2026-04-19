@@ -46,7 +46,8 @@ def restart_myself():
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
-    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d.까지'
+    # 노이즈 제거 (품절, 환불, 날짜 등)
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d{2}까지'
     return re.sub(p, '', txt).strip()
 
 def check_commands():
@@ -61,7 +62,7 @@ def check_commands():
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [V2.99999 - ETERNAL PLUS]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
+                            msg = f"📊 [V2.99999c - SAFEGUARD]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
                             msg += f"\n⏱️ 실측 주기: {measured_cycle_time:.1f}s | 📦 추적: {len(known_in_stock_ids)}개"
                         send_message(msg)
@@ -78,11 +79,15 @@ def scan_task(task):
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
-            if len(res.text) < 1000 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
+            
+            # 🚨 검증: HTML이 너무 짧으면 무시
+            if len(res.text) < 1500: continue 
+            if "naver.com" in url and "naver" not in res.text.lower(): continue 
             
             clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
             soup = BeautifulSoup(clean_html, 'html.parser')
             data = {}
+            
             if "naver.com" in url:
                 for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
                     if '품절' in link.get_text(): continue
@@ -106,17 +111,20 @@ def scan_task(task):
                     p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
                     if len(p_name) >= 3: data[p_id] = {"name": clean_product_name(p_name), "stock": ""}
             
-            # 🚨 [비타민 한 알] 메모리 해제
+            # 🚨 [양치기 방어] 하나도 안 보이면 성공이라고 하지 않음 (재시도 유도)
+            if not data:
+                soup.decompose()
+                continue
+
             soup.decompose()
             return label, data, url, True
         except: continue
     return label, {}, url, False
 
 if __name__ == "__main__":
-    send_message("🟢 [V2.99999 - THE ETERNAL PLUS] 가동.\n아무 걱정 없이 믿고 맡기셔도 되는 '완성된 자식'입니다.")
+    send_message("🟢 [V2.99999c] 긴급 수술 완료.\n더 이상 '가짜 품절'로 검사관님을 기만하지 않습니다.")
     while True:
         cycle_start = time.time()
-        # 🚨 [생존 로직] GitHub의 6시간 강제 종료벽 돌파
         if time.time() - ST_TIME > 20400: restart_myself(); break
         
         tasks = []
@@ -142,6 +150,7 @@ if __name__ == "__main__":
                         if "naver.com" in url: last_naver_time = now_str
                         else: last_bnkr_time = now_str
                         
+                        # 신규 입고 판단
                         new_items = set(data.keys()) - known_in_stock_ids
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
@@ -155,6 +164,7 @@ if __name__ == "__main__":
 
         with lock:
             if cycle_count > 1:
+                # 🚨 [품절 판정 강화] 완벽하게 스캔 성공한 URL에 속한 아이템만 품절 대상
                 gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_info.get(pid, {}).get('url') in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{item_info[pid]['name']}" for pid in gone_ids]
@@ -162,18 +172,22 @@ if __name__ == "__main__":
                     for pid in gone_ids: 
                         known_in_stock_ids.discard(pid); item_info.pop(pid, None)
             
-            temp_counts, v_labels = {t['label']: 0 for t in tasks}, {t['label'] for t in tasks}
+            # 유령 데이터 정리
+            v_labels = {t['label'] for t in tasks}
+            v_urls = {t['url'] for t in tasks}
             for pid in list(known_in_stock_ids):
                 info = item_info.get(pid, {})
-                cur_lbl = info.get('label')
-                if cur_lbl in v_labels: temp_counts[cur_lbl] = temp_counts.get(cur_lbl, 0) + 1
-                else: known_in_stock_ids.discard(pid); item_info.pop(pid, None)
+                if info.get('url') not in v_urls or info.get('label') not in v_labels:
+                    known_in_stock_ids.discard(pid); item_info.pop(pid, None)
+            
+            temp_counts = {l: 0 for l in v_labels}
+            for pid in known_in_stock_ids:
+                lbl = item_info.get(pid, {}).get('label')
+                if lbl in temp_counts: temp_counts[lbl] += 1
             category_counts = temp_counts
 
         check_commands()
         target_cycle = 18.2
         elapsed = time.time() - cycle_start
-        # 🚨 [정직한 리포트] 대기 시간까지 포함한 '진짜' 주기를 기록
-        wait_time = max(0.1, target_cycle - elapsed)
-        time.sleep(wait_time)
+        time.sleep(max(0.1, target_cycle - elapsed))
         measured_cycle_time = time.time() - cycle_start
