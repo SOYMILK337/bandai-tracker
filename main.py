@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 1. 시스템 설정
-ST_TIME = time.time() # 봇 시작 시간 기록
+ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
 
 # ✅ 정예 프록시 요원 (5개)
@@ -46,7 +46,7 @@ def restart_myself():
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
-    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지'
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d.까지'
     return re.sub(p, '', txt).strip()
 
 def check_commands():
@@ -61,9 +61,9 @@ def check_commands():
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [V2.9999 - THE ETERNAL]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
+                            msg = f"📊 [V2.99999 - ETERNAL PLUS]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                            msg += f"\n⏱️ 주기: {measured_cycle_time:.1f}s | 📦 추적: {len(known_in_stock_ids)}개"
+                            msg += f"\n⏱️ 실측 주기: {measured_cycle_time:.1f}s | 📦 추적: {len(known_in_stock_ids)}개"
                         send_message(msg)
     except: pass
 
@@ -105,15 +105,18 @@ def scan_task(task):
                     name_tag = link.find('h5')
                     p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
                     if len(p_name) >= 3: data[p_id] = {"name": clean_product_name(p_name), "stock": ""}
+            
+            # 🚨 [비타민 한 알] 메모리 해제
+            soup.decompose()
             return label, data, url, True
         except: continue
     return label, {}, url, False
 
 if __name__ == "__main__":
-    send_message("🟢 [V2.9999 - THE ETERNAL] 가동.\n아들 군대 보내는 마음으로 챙긴 최종 생존 패키지입니다.")
+    send_message("🟢 [V2.99999 - THE ETERNAL PLUS] 가동.\n아무 걱정 없이 믿고 맡기셔도 되는 '완성된 자식'입니다.")
     while True:
         cycle_start = time.time()
-        # 🚨 [생존 로직] 실행 5시간 40분 경과 시 자동 재시작 (GitHub 6시간 벽 돌파)
+        # 🚨 [생존 로직] GitHub의 6시간 강제 종료벽 돌파
         if time.time() - ST_TIME > 20400: restart_myself(); break
         
         tasks = []
@@ -159,15 +162,18 @@ if __name__ == "__main__":
                     for pid in gone_ids: 
                         known_in_stock_ids.discard(pid); item_info.pop(pid, None)
             
-            temp_counts, valid_urls = {t['label']: 0 for t in tasks}, {t['url'] for t in tasks}
+            temp_counts, v_labels = {t['label']: 0 for t in tasks}, {t['label'] for t in tasks}
             for pid in list(known_in_stock_ids):
                 info = item_info.get(pid, {})
-                if info.get('url') in valid_urls: temp_counts[info['label']] = temp_counts.get(info['label'], 0) + 1
+                cur_lbl = info.get('label')
+                if cur_lbl in v_labels: temp_counts[cur_lbl] = temp_counts.get(cur_lbl, 0) + 1
                 else: known_in_stock_ids.discard(pid); item_info.pop(pid, None)
             category_counts = temp_counts
 
         check_commands()
         target_cycle = 18.2
         elapsed = time.time() - cycle_start
-        measured_cycle_time = elapsed
-        time.sleep(max(0.1, target_cycle - elapsed))
+        # 🚨 [정직한 리포트] 대기 시간까지 포함한 '진짜' 주기를 기록
+        wait_time = max(0.1, target_cycle - elapsed)
+        time.sleep(wait_time)
+        measured_cycle_time = time.time() - cycle_start
