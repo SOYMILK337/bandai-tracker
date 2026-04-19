@@ -1,9 +1,9 @@
 # 1. MG
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
 # 2. RG
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
 # 3. PG
-https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
+https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
 # 4. HG 수성의 마녀
 https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
 # 5. HG SEED 계열
