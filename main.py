@@ -1,4 +1,4 @@
-import os, requests, time, re, json, html, urllib.parse, threading
+import os, requests, time, re, json, html, urllib.parse, threading, random
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -20,9 +20,10 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
+# 🚨 [개선] 순수 작업 시간(work_time) 기록 변수 추가
 group_state = {
-    "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
-    "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
+    "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "work_time": 0.0, "cycle": 0.0},
+    "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "work_time": 0.0, "cycle": 0.0}
 }
 
 last_update_id = -1
@@ -43,11 +44,10 @@ def execute_reincarnation():
     for _ in range(3):
         try: 
             res = requests.post(url, headers=headers, json={"event_type": "restart_bot"}, timeout=10)
-            if res.status_code in [200, 204]: 
-                os._exit(0) 
+            if res.status_code in [200, 204]: os._exit(0) 
         except: time.sleep(2)
         
-    send_message("🚨 [치명적 오류] 봇 자동 부활에 실패했습니다!\n수동 재가동이 필요할 수 있습니다.")
+    send_message("🚨 [오류] 봇 부활 실패. 수동 확인 요망.")
     with lock: is_restarting = False 
 
 def trigger_reincarnation():
@@ -80,8 +80,7 @@ def check_commands():
                                 for line in f:
                                     line = line.strip()
                                     if line.startswith("#"): lbl = line.replace("#", "").strip()
-                                    if lbl not in ordered_labels and line:
-                                        ordered_labels.append(lbl)
+                                    if lbl not in ordered_labels and line: ordered_labels.append(lbl)
                         except: pass
                         
                         with lock:
@@ -92,9 +91,10 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.0_GOD_PERFECT]\n"
-                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ {group_state['반몰']['cycle']:.1f}s)\n"
-                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ {group_state['네반몰']['cycle']:.1f}s)\n\n"
+                            msg = f"📊 [V3.2_TRANSPARENT_STEALTH]\n"
+                            # 🚨 [개선] 순수 파싱에 걸린 시간(작업)과 전체 대기 시간을 합친(주기)를 투명하게 표기
+                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
+                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
                             msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
@@ -105,11 +105,17 @@ def scan_task(task):
     global proxy_index
     url, label = task['url'], task['label']
     if not url.startswith("http"): url = "https://" + url
+    
+    # 🚨 [스텔스 캐시 무효화] 서버 차단 위험 없이 캐시를 우회하기 위한 랜덤 숫자 꼬리표
+    stealth_val = random.randint(1, 99999)
+    busted_url = f"{url}&v={stealth_val}" if "?" in url else f"{url}?v={stealth_val}"
+    
     for _ in range(2):
         try:
             with lock:
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
-            p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
+            p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(busted_url, safe='')
+            
             res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
             if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
@@ -157,7 +163,6 @@ def monitoring_engine(group_name, target_cycle):
         cycle_start = time.time()
         now_kst = datetime.now(KST)
         
-        # 🚨 [패치] 매일 오후 2시 20분~21분 사이 혹은 5시간 40분 경과 시 (마의 시간대 제외) 재기동
         current_minutes = now_kst.hour * 60 + now_kst.minute
         is_daily_restart_time = (now_kst.hour == 14 and now_kst.minute == 20)
         is_forbidden_time = (14 * 60 + 40) <= current_minutes <= (16 * 60 + 50)
@@ -189,7 +194,7 @@ def monitoring_engine(group_name, target_cycle):
                 label, data, url, is_success = future.result()
                 if is_success:
                     with lock:
-                        now_str = now_kst.strftime('%H:%M:%S')
+                        now_str = datetime.now(KST).strftime('%H:%M:%S')
                         my_state['last_time'] = now_str
                         new_items = set(data.keys()) - my_state['known']
                         if cycle_count > 1 and new_items:
@@ -205,7 +210,7 @@ def monitoring_engine(group_name, target_cycle):
                 gone_ids = [pid for pid in (my_state['known'] - current_cycle_ids) if my_state['items'].get(pid, {}).get('url') in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{my_state['items'][pid]['name']}" for pid in gone_ids]
-                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({now_kst.strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
+                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: my_state['known'].discard(pid); my_state['items'].pop(pid, None)
             v_urls, v_labels = {t['url'] for t in tasks}, {t['label'] for t in tasks}
             for pid in list(my_state['known']):
@@ -217,12 +222,15 @@ def monitoring_engine(group_name, target_cycle):
                 if lbl in t_counts: t_counts[lbl] += 1
             my_state['counts'] = t_counts
 
+        # 🚨 [개선] 순수 작업 시간 기록 후, 남은 시간만큼 대기
         elapsed_work = time.time() - cycle_start
+        with lock: my_state['work_time'] = elapsed_work
+        
         time.sleep(max(0.1, target_cycle - elapsed_work))
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.0_GOD_PERFECT] 가동.\n매일 14:20 고정 재기동 및 수량 파싱 강화 패치가 적용되었습니다.")
+    send_message("🛡️ [V3.2_TRANSPARENT_STEALTH] 가동.\n타이머 투명성 확보 및 스텔스 캐시 무효화 패치 적용.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
