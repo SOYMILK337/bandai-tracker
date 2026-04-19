@@ -20,7 +20,7 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 🚨 독립된 뇌 구조
+# 🚨 독립된 뇌 구조 및 황제의 옥새(Lock)
 group_state = {
     "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
     "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
@@ -28,6 +28,7 @@ group_state = {
 
 last_update_id = -1
 lock = threading.Lock()
+is_restarting = False # API 중복 호출 방지용 플래그
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -46,7 +47,7 @@ def restart_myself():
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
-    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d.까지'
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d{2}까지'
     return re.sub(p, '', txt).strip()
 
 def check_commands():
@@ -60,8 +61,6 @@ def check_commands():
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
-                        
-                        # 🚨 [개선 2] list.txt의 원본 순서를 칼같이 읽어와서 배열 생성
                         ordered_labels = []
                         try:
                             with open("list.txt", "r", encoding="utf-8") as f:
@@ -76,15 +75,13 @@ def check_commands():
                         with lock:
                             total_known = len(group_state["반몰"]["known"]) + len(group_state["네반몰"]["known"])
                             
-                            # 정렬된 배열을 기반으로 카운트 병합
                             merged_counts = {l: 0 for l in ordered_labels}
                             for g in ["반몰", "네반몰"]:
                                 for l, c in group_state[g]["counts"].items():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V2.99999_OMEGA - 퍼펙트]\n"
-                            # 🚨 [개선 1] 실측 주기를 명확하게 표기
+                            msg = f"📊 [EMPEROR EDITION - 황제 하사품]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             
@@ -121,7 +118,12 @@ def scan_task(task):
                                 if item.get('key') == 'stk_qty': stock = str(item.get('value'))
                         except: pass
                     if not name: name = link.get_text(strip=True)
-                    if len(name) >= 3: data[p_id] = {"name": clean_product_name(name), "stock": stock}
+                    
+                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower():
+                        continue
+                        
+                    c_name = clean_product_name(name)
+                    if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": stock}
             else:
                 for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
                     txt = link.get_text(strip=True).lower()
@@ -130,7 +132,12 @@ def scan_task(task):
                     p_id = ("B_" if 'gno=' in href else "PB_") + (href.split('gno=')[-1] if 'gno=' in href else href.split('pno=')[-1]).split('&')[0]
                     name_tag = link.find('h5')
                     p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
-                    if len(p_name) >= 3: data[p_id] = {"name": clean_product_name(p_name), "stock": ""}
+                    
+                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower():
+                        continue
+                        
+                    c_name = clean_product_name(p_name)
+                    if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
             
             if not data:
                 soup.decompose(); continue
@@ -140,12 +147,20 @@ def scan_task(task):
     return label, {}, url, False
 
 def monitoring_engine(group_name, target_cycle):
+    global is_restarting
     my_state = group_state[group_name]
     cycle_count = 0
     
     while True:
         cycle_start = time.time()
-        if time.time() - ST_TIME > 20400: restart_myself(); break
+        
+        # 🚨 황제의 통제: 중복 재시작 방지 로직
+        if time.time() - ST_TIME > 20400: 
+            with lock:
+                if not is_restarting:
+                    is_restarting = True
+                    restart_myself()
+            break
         
         tasks = []
         try:
@@ -206,13 +221,12 @@ def monitoring_engine(group_name, target_cycle):
                 if lbl in t_counts: t_counts[lbl] += 1
             my_state['counts'] = t_counts
 
-        # 🚨 [개선 1] 스톱워치 측정 위치 수정 (잠자기 완료 후 측정해야 진짜 실측 주기)
         elapsed_work = time.time() - cycle_start
         time.sleep(max(0.1, target_cycle - elapsed_work))
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🟢 [V2.99999_OMEGA_PERFECT] 구동 시작.\n실측 주기 표기 및 카테고리 정렬 버그 수정 완료.")
+    send_message("👑 [EMPEROR EDITION] 코딩 황제의 하사품 구동 개시.\n어떠한 예외 상황도 허락하지 않는 무결점 엔진입니다.")
     
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
