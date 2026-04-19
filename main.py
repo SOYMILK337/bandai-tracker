@@ -13,12 +13,13 @@ import threading
 start_time = time.time()
 KST = timezone(timedelta(hours=9))
 
-# 프록시 ID (8만 건 할당량 최적화)
+# ✅ 프록시 ID (10만 건 할당량 최적화 - 총 5개)
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
     "AKfycbwUJTb02XOUbV-obvpE7WXRdDn9AxJl5H-KWb-kRxCVqQ3AJpkuBFokAoxwkhp_gWXB",
-    "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw"
+    "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw",
+    "AKfycby-qFnD922uw9WfCebRtSmVe_FhOPvmdP2m8X-xRLbuzK29Xx0oGGe18dv7-A4zBoir" # 추가된 5번째 총알
 ]
 
 token = os.environ.get('TELEGRAM_TOKEN')
@@ -26,10 +27,10 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 2. 공유 데이터 저장소 (연좌제 버그 해결을 위해 item_to_url 추가)
+# 2. 공유 데이터 저장소
 known_in_stock_ids = set()
 item_to_label = {}
-item_to_url = {}  # 🚨 개별 주소 추적용 핵심 변수 추가
+item_to_url = {}
 all_seen_names = {}
 last_bnkr_time, last_naver_time = "대기 중", "대기 중"
 category_counts = {}
@@ -46,11 +47,9 @@ def send_message(text):
 
 def restart_myself():
     if not github_pat or not repo_full_name: return
-    # 🚨 [지구 멸망 버그 1 해결] 텔레그램 API -> 깃허브 API 로 정상 복구
     url = f"https://api.github.com/repos/{repo_full_name}/dispatches"
     headers = {"Authorization": f"token {github_pat}", "Accept": "application/vnd.github.v3+json"}
     
-    # 확실한 바통 터치를 위해 최대 3회 끈질기게 시도
     for _ in range(3):
         try: 
             res = requests.post(url, headers=headers, json={"event_type": "restart_bot"}, timeout=10)
@@ -58,7 +57,6 @@ def restart_myself():
         except: time.sleep(2)
 
 def clean_product_name(raw_name):
-    # 정규식 미세 조정으로 찌꺼기 문자열 완벽 제거
     p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지'
     return re.sub(p, '', raw_name).strip()
 
@@ -74,9 +72,9 @@ def check_commands():
                 if "message" in update and "text" in update["message"]:
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [마스터피스 V2.5]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg = f"📊 [마스터피스 V2.6 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                            msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초 (실측 타겟: 26s)"
+                            msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초 (실측 타겟: 19s)"
                             msg += f"\n⏱️ 주소당 평균: {avg_scan_time:.2f}초"
                             msg += f"\n📦 현재 재고: {len(known_in_stock_ids)}개"
                         send_message(msg)
@@ -121,7 +119,6 @@ def scan_task(task):
 
 if __name__ == "__main__":
     tasks = []
-    # 🚨 [지구 멸망 버그 2 해결] 한글 깨짐 방지용 utf-8 명시
     with open("list.txt", "r", encoding="utf-8") as f:
         lbl = "기타"
         for line in f:
@@ -129,7 +126,8 @@ if __name__ == "__main__":
             if line.startswith("#"): lbl = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": lbl})
 
-    send_message("🚨 [최종 승인] 지구 방어 완료! 마스터피스 V2.5 가동 시작.")
+    # ✅ 부팅 메시지 아이콘 변경
+    send_message("🟢 [포식자 엔진 가동] 총알 10만발 장전 완료. 실측 19초 주기를 보장합니다.")
 
     while True:
         cycle_start = time.time()
@@ -144,7 +142,7 @@ if __name__ == "__main__":
 
         cycle_count += 1
         current_cycle_ids = set()
-        success_urls = set() # 🚨 카테고리가 아닌 '주소' 단위 성공 여부 추적
+        success_urls = set()
         durations = []
         
         with ThreadPoolExecutor(max_workers=20) as executor:
@@ -160,26 +158,26 @@ if __name__ == "__main__":
                         new_items = set(data.keys()) - known_in_stock_ids
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]}" for pid in new_items]
-                            send_message(f"🚨 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
+                            # ✅ 입고 아이콘 직관적으로 변경
+                            send_message(f"🟢 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
                         
-                        # 🚨 연좌제 방지를 위해 데이터 갱신 시 url 매핑 추가
                         known_in_stock_ids.update(data.keys())
                         current_cycle_ids.update(data.keys())
                         all_seen_names.update(data)
-                        success_urls.add(url) # 통신 성공한 주소만 기억
+                        success_urls.add(url)
                         for pid in data: 
                             item_to_label[pid] = label
-                            item_to_url[pid] = url # 이 킷은 이 주소에서 왔다고 명시
+                            item_to_url[pid] = url
 
         with lock:
             if durations: avg_scan_time = sum(durations) / len(durations)
             if cycle_count > 1:
-                # 🚨 [핵심 논리 수정] 통신에 "성공한 주소"에 속했던 킷만 품절 여부 검사
                 gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_to_url.get(pid) in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{all_seen_names[pid]}" for pid in gone_ids]
                     for i in range(0, len(gone_list), 30):
-                        send_message(f"🗑️ 품절 포착 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
+                        # ✅ 품절 아이콘 직관적으로 변경
+                        send_message(f"❌ 품절 포착 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: known_in_stock_ids.discard(pid)
             
             temp_counts = {t['label']: 0 for t in tasks}
@@ -188,8 +186,8 @@ if __name__ == "__main__":
                 if lbl in temp_counts: temp_counts[lbl] += 1
             category_counts = temp_counts
 
-        # 영점 조절 완료된 가변 대기 로직 (실측 26.0s 보장)
-        target_cycle = 25.0
+        # ✅ 10만 건 기준 19초 실측을 위한 영점 조절
+        target_cycle = 18.0
         elapsed_so_far = time.time() - cycle_start
         remaining_wait = max(5.0, target_cycle - elapsed_so_far)
         
