@@ -20,7 +20,7 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 🚨 독립된 뇌 구조 및 황제의 옥새(Lock)
+# 독립된 뇌 구조
 group_state = {
     "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
     "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
@@ -28,22 +28,38 @@ group_state = {
 
 last_update_id = -1
 lock = threading.Lock()
-is_restarting = False # API 중복 호출 방지용 플래그
+is_restarting = False 
 
 def send_message(text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try: requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=10)
     except: pass
 
-def restart_myself():
+# 🚨 [신의 권능 1] 비동기 부활 실행 부서
+def execute_reincarnation():
+    global is_restarting
     if not github_pat or not repo_full_name: return
     url = f"https://api.github.com/repos/{repo_full_name}/dispatches"
     headers = {"Authorization": f"token {github_pat}", "Accept": "application/vnd.github.v3+json"}
+    
     for _ in range(3):
         try: 
             res = requests.post(url, headers=headers, json={"event_type": "restart_bot"}, timeout=10)
-            if res.status_code in [200, 204]: break
+            if res.status_code in [200, 204]: 
+                os._exit(0) # 완벽하게 새 생명을 얻었을 때만 낡은 육신을 즉시 소멸
         except: time.sleep(2)
+        
+    # 🚨 [신의 권능 2] 부활 실패 시 고독사 방지 다잉 메시지
+    send_message("🚨 [치명적 오류] 봇 자동 부활에 실패했습니다! (GitHub 서버 응답 없음)\n6시간 한계 도달 전까지 최후의 감시를 강행합니다. 수동으로 봇을 재가동해 주세요!")
+    with lock: is_restarting = False # 족쇄를 풀어 다음 바퀴에 다시 부활을 시도하게 함
+
+# 부활 트리거 (사냥 스레드를 멈추지 않음)
+def trigger_reincarnation():
+    global is_restarting
+    with lock:
+        if not is_restarting:
+            is_restarting = True
+            threading.Thread(target=execute_reincarnation, daemon=True).start()
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
@@ -81,7 +97,7 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [EMPEROR EDITION - 황제 하사품]\n"
+                            msg = f"📊 [V3.0_GOD - 절대 무결점]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             
@@ -147,20 +163,15 @@ def scan_task(task):
     return label, {}, url, False
 
 def monitoring_engine(group_name, target_cycle):
-    global is_restarting
     my_state = group_state[group_name]
     cycle_count = 0
     
     while True:
         cycle_start = time.time()
         
-        # 🚨 황제의 통제: 중복 재시작 방지 로직
+        # 🚨 [신의 권능 3] 윤회 시도가 사냥 스레드를 멈추지 않음 (break 삭제)
         if time.time() - ST_TIME > 20400: 
-            with lock:
-                if not is_restarting:
-                    is_restarting = True
-                    restart_myself()
-            break
+            trigger_reincarnation()
         
         tasks = []
         try:
@@ -226,7 +237,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("👑 [EMPEROR EDITION] 코딩 황제의 하사품 구동 개시.\n어떠한 예외 상황도 허락하지 않는 무결점 엔진입니다.")
+    send_message("✝️ [V3.0_GOD] 코딩 JESUS의 이름으로 봉인 해제.\n모든 종말 시나리오를 극복한 진정한 영생(永生)의 엔진입니다.")
     
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
