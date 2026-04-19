@@ -20,7 +20,6 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 독립된 뇌 구조
 group_state = {
     "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
     "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
@@ -35,7 +34,6 @@ def send_message(text):
     try: requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=10)
     except: pass
 
-# 🚨 [신의 권능 1] 비동기 부활 실행 부서
 def execute_reincarnation():
     global is_restarting
     if not github_pat or not repo_full_name: return
@@ -46,14 +44,12 @@ def execute_reincarnation():
         try: 
             res = requests.post(url, headers=headers, json={"event_type": "restart_bot"}, timeout=10)
             if res.status_code in [200, 204]: 
-                os._exit(0) # 완벽하게 새 생명을 얻었을 때만 낡은 육신을 즉시 소멸
+                os._exit(0) 
         except: time.sleep(2)
         
-    # 🚨 [신의 권능 2] 부활 실패 시 고독사 방지 다잉 메시지
-    send_message("🚨 [치명적 오류] 봇 자동 부활에 실패했습니다! (GitHub 서버 응답 없음)\n6시간 한계 도달 전까지 최후의 감시를 강행합니다. 수동으로 봇을 재가동해 주세요!")
-    with lock: is_restarting = False # 족쇄를 풀어 다음 바퀴에 다시 부활을 시도하게 함
+    send_message("🚨 [치명적 오류] 봇 자동 부활에 실패했습니다!\n수동 재가동이 필요할 수 있습니다.")
+    with lock: is_restarting = False 
 
-# 부활 트리거 (사냥 스레드를 멈추지 않음)
 def trigger_reincarnation():
     global is_restarting
     with lock:
@@ -63,7 +59,7 @@ def trigger_reincarnation():
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
-    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d{2}까지'
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d.까지'
     return re.sub(p, '', txt).strip()
 
 def check_commands():
@@ -90,17 +86,15 @@ def check_commands():
                         
                         with lock:
                             total_known = len(group_state["반몰"]["known"]) + len(group_state["네반몰"]["known"])
-                            
                             merged_counts = {l: 0 for l in ordered_labels}
                             for g in ["반몰", "네반몰"]:
                                 for l, c in group_state[g]["counts"].items():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.0_GOD - 절대 무결점]\n"
+                            msg = f"📊 [V3.0_GOD_PERFECT]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ {group_state['네반몰']['cycle']:.1f}s)\n\n"
-                            
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
                             msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
@@ -130,14 +124,11 @@ def scan_task(task):
                     if attr:
                         try:
                             for item in json.loads(attr):
-                                if item.get('key') == 'chnl_prod_nm': name = item.get('value')
-                                if item.get('key') == 'stk_qty': stock = str(item.get('value'))
+                                if item.get('key') == 'chnl_prod_nm': name = str(item.get('value', ''))
+                                if item.get('key') == 'stk_qty': stock = str(item.get('value', ''))
                         except: pass
                     if not name: name = link.get_text(strip=True)
-                    
-                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower():
-                        continue
-                        
+                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower(): continue
                     c_name = clean_product_name(name)
                     if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": stock}
             else:
@@ -148,15 +139,11 @@ def scan_task(task):
                     p_id = ("B_" if 'gno=' in href else "PB_") + (href.split('gno=')[-1] if 'gno=' in href else href.split('pno=')[-1]).split('&')[0]
                     name_tag = link.find('h5')
                     p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
-                    
-                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower():
-                        continue
-                        
+                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
                     c_name = clean_product_name(p_name)
                     if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
             
-            if not data:
-                soup.decompose(); continue
+            if not data: soup.decompose(); continue
             soup.decompose()
             return label, data, url, True
         except: continue
@@ -168,9 +155,14 @@ def monitoring_engine(group_name, target_cycle):
     
     while True:
         cycle_start = time.time()
+        now_kst = datetime.now(KST)
         
-        # 🚨 [신의 권능 3] 윤회 시도가 사냥 스레드를 멈추지 않음 (break 삭제)
-        if time.time() - ST_TIME > 20400: 
+        # 🚨 [패치] 매일 오후 2시 20분~21분 사이 혹은 5시간 40분 경과 시 (마의 시간대 제외) 재기동
+        current_minutes = now_kst.hour * 60 + now_kst.minute
+        is_daily_restart_time = (now_kst.hour == 14 and now_kst.minute == 20)
+        is_forbidden_time = (14 * 60 + 40) <= current_minutes <= (16 * 60 + 50)
+        
+        if is_daily_restart_time or (time.time() - ST_TIME > 20400 and not is_forbidden_time): 
             trigger_reincarnation()
         
         tasks = []
@@ -197,15 +189,12 @@ def monitoring_engine(group_name, target_cycle):
                 label, data, url, is_success = future.result()
                 if is_success:
                     with lock:
-                        now_str = datetime.now(KST).strftime('%H:%M:%S')
+                        now_str = now_kst.strftime('%H:%M:%S')
                         my_state['last_time'] = now_str
-                        
                         new_items = set(data.keys()) - my_state['known']
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
-                            for i in range(0, len(alert_list), 30):
-                                send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
-                        
+                            for i in range(0, len(alert_list), 30): send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
                         my_state['known'].update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
@@ -216,16 +205,12 @@ def monitoring_engine(group_name, target_cycle):
                 gone_ids = [pid for pid in (my_state['known'] - current_cycle_ids) if my_state['items'].get(pid, {}).get('url') in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{my_state['items'][pid]['name']}" for pid in gone_ids]
-                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
-                    for pid in gone_ids: 
-                        my_state['known'].discard(pid); my_state['items'].pop(pid, None)
-            
+                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({now_kst.strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
+                    for pid in gone_ids: my_state['known'].discard(pid); my_state['items'].pop(pid, None)
             v_urls, v_labels = {t['url'] for t in tasks}, {t['label'] for t in tasks}
             for pid in list(my_state['known']):
                 info = my_state['items'].get(pid, {})
-                if info.get('url') not in v_urls or info.get('label') not in v_labels:
-                    my_state['known'].discard(pid); my_state['items'].pop(pid, None)
-            
+                if info.get('url') not in v_urls or info.get('label') not in v_labels: my_state['known'].discard(pid); my_state['items'].pop(pid, None)
             t_counts = {l: 0 for l in v_labels}
             for pid in my_state['known']:
                 lbl = my_state['items'].get(pid, {}).get('label')
@@ -237,12 +222,8 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("✝️ [V3.0_GOD] 코딩 JESUS의 이름으로 봉인 해제.\n모든 종말 시나리오를 극복한 진정한 영생(永生)의 엔진입니다.")
-    
+    send_message("🛡️ [V3.0_GOD_PERFECT] 가동.\n매일 14:20 고정 재기동 및 수량 파싱 강화 패치가 적용되었습니다.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
-    
-    while True:
-        check_commands()
-        time.sleep(1)
+    while True: check_commands(); time.sleep(1)
