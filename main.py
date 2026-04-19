@@ -19,7 +19,7 @@ PROXY_IDS = [
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
     "AKfycbwUJTb02XOUbV-obvpE7WXRdDn9AxJl5H-KWb-kRxCVqQ3AJpkuBFokAoxwkhp_gWXB",
     "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw",
-    "AKfycby-qFnD922uw9WfCebRtSmVe_FhOPvmdP2m8X-xRLbuzK29Xx0oGGe18dv7-A4zBoir" # 추가된 5번째 총알
+    "AKfycby-qFnD922uw9WfCebRtSmVe_FhOPvmdP2m8X-xRLbuzK29Xx0oGGe18dv7-A4zBoir"
 ]
 
 token = os.environ.get('TELEGRAM_TOKEN')
@@ -72,7 +72,7 @@ def check_commands():
                 if "message" in update and "text" in update["message"]:
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [마스터피스 V2.6 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg = f"📊 [마스터피스 V2.7 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
                             msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초 (실측 타겟: 19s)"
                             msg += f"\n⏱️ 주소당 평균: {avg_scan_time:.2f}초"
@@ -93,12 +93,17 @@ def scan_task(task):
             proxy_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
             if len(res.text) < 1000: continue
-            soup = BeautifulSoup(res.text, 'html.parser')
+            
+            # 🚨 뇌정지 방지: html.parser가 멈추지 않도록 불필요한 선언부 제거 후 파싱
+            safe_html = res.text.replace('<!DOCTYPE html>', '').replace('xmlns="http://www.w3.org/1999/xhtml"', '')
+            soup = BeautifulSoup(safe_html, 'html.parser')
             data = {}
+            
             if "naver.com" in url:
                 links = soup.find_all('a', href=re.compile(r'/bandai/products/\d+'))
                 for link in links:
-                    if '품절' in link.get_text(): continue
+                    text = link.get_text(strip=True)
+                    if '품절' in text: continue
                     p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
                     attr = link.get('data-shp-contents-dtl')
                     if attr:
@@ -110,9 +115,17 @@ def scan_task(task):
             else:
                 links = soup.find_all('a', href=re.compile(r'gno=\d+'))
                 for link in links:
+                    text = link.get_text(strip=True)
+                    
+                    # 🚨 [절대 방어막] 반다이몰 대소문자 변칙 및 품절, 예약종료 완벽 차단
+                    text_lower = text.lower()
+                    if 'sold out' in text_lower or '예약종료' in text or '품절' in text: 
+                        continue
+                    
                     p_id = "B_" + link['href'].split('gno=')[-1].split('&')[0]
-                    if len(link.get_text(strip=True)) >= 10:
-                        data[p_id] = clean_product_name(link.get_text(strip=True))
+                    if len(text) >= 10:
+                        data[p_id] = clean_product_name(text)
+            
             return label, data, url, True, time.time() - task_start
         except: continue
     return label, {}, url, False, time.time() - task_start
@@ -126,8 +139,8 @@ if __name__ == "__main__":
             if line.startswith("#"): lbl = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": lbl})
 
-    # ✅ 부팅 메시지 아이콘 변경
-    send_message("🟢 [포식자 엔진 가동] 총알 10만발 장전 완료. 실측 19초 주기를 보장합니다.")
+    # ✅ 부팅 메시지 
+    send_message("🟢 [마스터피스 V2.7] 엔진 가동. 방어막 활성화 및 19초 주기를 보장합니다.")
 
     while True:
         cycle_start = time.time()
@@ -156,9 +169,10 @@ if __name__ == "__main__":
                         if "naver.com" in url: last_naver_time = now_str
                         else: last_bnkr_time = now_str
                         new_items = set(data.keys()) - known_in_stock_ids
+                        
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]}" for pid in new_items]
-                            # ✅ 입고 아이콘 직관적으로 변경
+                            # ✅ 입고 아이콘
                             send_message(f"🟢 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
                         
                         known_in_stock_ids.update(data.keys())
@@ -176,7 +190,7 @@ if __name__ == "__main__":
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{all_seen_names[pid]}" for pid in gone_ids]
                     for i in range(0, len(gone_list), 30):
-                        # ✅ 품절 아이콘 직관적으로 변경
+                        # ✅ 품절 아이콘
                         send_message(f"❌ 품절 포착 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: known_in_stock_ids.discard(pid)
             
@@ -186,7 +200,7 @@ if __name__ == "__main__":
                 if lbl in temp_counts: temp_counts[lbl] += 1
             category_counts = temp_counts
 
-        # ✅ 10만 건 기준 19초 실측을 위한 영점 조절
+        # ✅ 10만 건 기준 19초 실측을 위한 영점 조절 (18.0)
         target_cycle = 18.0
         elapsed_so_far = time.time() - cycle_start
         remaining_wait = max(5.0, target_cycle - elapsed_so_far)
