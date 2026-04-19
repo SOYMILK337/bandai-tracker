@@ -100,30 +100,44 @@ def scan_task(task):
             data = {}
             
             if "naver.com" in url:
-                links = soup.find_all('a', href=re.compile(r'/bandai/products/\d+'))
+                # 🚨 [만능 네이버 패치] 특정 스토어 이름(bandai)에 종속되지 않고 모든 상품 탐색
+                links = soup.find_all('a', href=re.compile(r'/products/\d+'))
                 for link in links:
                     text = link.get_text(strip=True)
                     if '품절' in text: continue
                     p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
+                    
+                    name = ""
                     attr = link.get('data-shp-contents-dtl')
                     if attr:
                         try:
                             for item in json.loads(attr):
                                 if item.get('key') == 'chnl_prod_nm':
-                                    data[p_id] = clean_product_name(item.get('value')); break
+                                    name = item.get('value'); break
                         except: pass
+                    
+                    if not name: 
+                        name = text.replace('좋아요', '').replace('장바구니', '').strip()
+                        
+                    if len(name) >= 3:
+                        data[p_id] = clean_product_name(name)
             else:
-                links = soup.find_all('a', href=re.compile(r'gno=\d+'))
+                # 🚨 [프반 + 짧은 이름 패치] gno= 뿐만 아니라 pno= (프리미엄 반다이)까지 싹쓸이
+                links = soup.find_all('a', href=re.compile(r'(gno|pno)=\d+'))
                 for link in links:
                     text = link.get_text(strip=True)
-                    
-                    # 🚨 [절대 방어막] 반다이몰 대소문자 변칙 및 품절, 예약종료 완벽 차단
                     text_lower = text.lower()
+                    
                     if 'sold out' in text_lower or '예약종료' in text or '품절' in text: 
                         continue
                     
-                    p_id = "B_" + link['href'].split('gno=')[-1].split('&')[0]
-                    if len(text) >= 10:
+                    href = link.get('href')
+                    if 'gno=' in href: 
+                        p_id = "B_" + href.split('gno=')[-1].split('&')[0]
+                    else: 
+                        p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
+                    
+                    if len(text) >= 5:  
                         data[p_id] = clean_product_name(text)
             
             return label, data, url, True, time.time() - task_start
@@ -139,7 +153,7 @@ if __name__ == "__main__":
             if line.startswith("#"): lbl = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": lbl})
 
-    # ✅ 부팅 메시지 
+    # ✅ 부팅 메시지
     send_message("🟢 [마스터피스 V2.7] 엔진 가동. 방어막 활성화 및 19초 주기를 보장합니다.")
 
     while True:
@@ -172,7 +186,6 @@ if __name__ == "__main__":
                         
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]}" for pid in new_items]
-                            # ✅ 입고 아이콘
                             send_message(f"🟢 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
                         
                         known_in_stock_ids.update(data.keys())
@@ -190,7 +203,6 @@ if __name__ == "__main__":
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{all_seen_names[pid]}" for pid in gone_ids]
                     for i in range(0, len(gone_list), 30):
-                        # ✅ 품절 아이콘
                         send_message(f"❌ 품절 포착 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: known_in_stock_ids.discard(pid)
             
