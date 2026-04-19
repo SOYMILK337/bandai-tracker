@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
 
-# ✅ 정예 프록시 요원 (5개)
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
@@ -21,12 +20,13 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 2. 데이터 저장소
-known_in_stock_ids = set()
-item_info = {} 
-last_bnkr_time, last_naver_time = "대기 중", "대기 중"
-category_counts, cycle_count = {}, 0
-last_update_id, measured_cycle_time = -1, 0.0
+# 🚨 뇌의 좌우 분리: 반몰과 네반몰의 데이터를 완벽히 격리
+group_state = {
+    "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
+    "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
+}
+
+last_update_id = -1
 lock = threading.Lock()
 
 def send_message(text):
@@ -46,8 +46,7 @@ def restart_myself():
 
 def clean_product_name(raw_name):
     txt = html.unescape(raw_name)
-    # 노이즈 제거 (품절, 환불, 날짜 등)
-    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d{2}까지'
+    p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|환불|반품|\d{2}\.\d.까지'
     return re.sub(p, '', txt).strip()
 
 def check_commands():
@@ -62,9 +61,17 @@ def check_commands():
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [V2.99999c - SAFEGUARD]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
-                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                            msg += f"\n⏱️ 실측 주기: {measured_cycle_time:.1f}s | 📦 추적: {len(known_in_stock_ids)}개"
+                            total_known = len(group_state["반몰"]["known"]) + len(group_state["네반몰"]["known"])
+                            merged_counts = {}
+                            for g in ["반몰", "네반몰"]:
+                                for l, c in group_state[g]["counts"].items():
+                                    merged_counts[l] = merged_counts.get(l, 0) + c
+                                    
+                            msg = f"📊 [V2.99999_OMEGA - 절대 완성판]\n"
+                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} ({group_state['반몰']['cycle']:.1f}s)\n"
+                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} ({group_state['네반몰']['cycle']:.1f}s)\n\n"
+                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items()])
+                            msg += f"\n📦 전체 추적: {total_known}개"
                         send_message(msg)
     except: pass
 
@@ -79,15 +86,11 @@ def scan_task(task):
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
-            
-            # 🚨 검증: HTML이 너무 짧으면 무시
-            if len(res.text) < 1500: continue 
-            if "naver.com" in url and "naver" not in res.text.lower(): continue 
+            if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
             clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
             soup = BeautifulSoup(clean_html, 'html.parser')
             data = {}
-            
             if "naver.com" in url:
                 for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
                     if '품절' in link.get_text(): continue
@@ -111,18 +114,18 @@ def scan_task(task):
                     p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
                     if len(p_name) >= 3: data[p_id] = {"name": clean_product_name(p_name), "stock": ""}
             
-            # 🚨 [양치기 방어] 하나도 안 보이면 성공이라고 하지 않음 (재시도 유도)
             if not data:
-                soup.decompose()
-                continue
-
+                soup.decompose(); continue
             soup.decompose()
             return label, data, url, True
         except: continue
     return label, {}, url, False
 
-if __name__ == "__main__":
-    send_message("🟢 [V2.99999c] 긴급 수술 완료.\n더 이상 '가짜 품절'로 검사관님을 기만하지 않습니다.")
+# 🚨 완벽히 독립된 감시 엔진
+def monitoring_engine(group_name, target_cycle):
+    my_state = group_state[group_name]
+    cycle_count = 0
+    
     while True:
         cycle_start = time.time()
         if time.time() - ST_TIME > 20400: restart_myself(); break
@@ -134,60 +137,69 @@ if __name__ == "__main__":
                 for line in f:
                     line = line.strip()
                     if line.startswith("#"): lbl = line.replace("#", "").strip()
-                    elif line: tasks.append({"url": line, "label": lbl})
+                    elif line:
+                        if (group_name == "반몰" and "bnkrmall" in line) or (group_name == "네반몰" and "naver.com" in line):
+                            tasks.append({"url": line, "label": lbl})
         except: pass
+        
+        if not tasks: 
+            time.sleep(10); continue
 
         cycle_count += 1
         current_cycle_ids, success_urls = set(), set()
         
-        with ThreadPoolExecutor(max_workers=20) as executor:
+        with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             for future in as_completed(future_to_url):
                 label, data, url, is_success = future.result()
                 if is_success:
                     with lock:
                         now_str = datetime.now(KST).strftime('%H:%M:%S')
-                        if "naver.com" in url: last_naver_time = now_str
-                        else: last_bnkr_time = now_str
+                        my_state['last_time'] = now_str
                         
-                        # 신규 입고 판단
-                        new_items = set(data.keys()) - known_in_stock_ids
+                        new_items = set(data.keys()) - my_state['known']
                         if cycle_count > 1 and new_items:
-                            alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
+                            alert_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
                             for i in range(0, len(alert_list), 30):
                                 send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
                         
-                        known_in_stock_ids.update(data.keys())
+                        my_state['known'].update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
-                        for pid, info in data.items(): item_info[pid] = {"name": info['name'], "url": url, "label": label}
+                        for pid, info in data.items(): my_state['items'][pid] = {"name": info['name'], "url": url, "label": label}
 
         with lock:
             if cycle_count > 1:
-                # 🚨 [품절 판정 강화] 완벽하게 스캔 성공한 URL에 속한 아이템만 품절 대상
-                gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_info.get(pid, {}).get('url') in success_urls]
+                gone_ids = [pid for pid in (my_state['known'] - current_cycle_ids) if my_state['items'].get(pid, {}).get('url') in success_urls]
                 if gone_ids:
-                    gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{item_info[pid]['name']}" for pid in gone_ids]
+                    gone_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{my_state['items'][pid]['name']}" for pid in gone_ids]
                     for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: 
-                        known_in_stock_ids.discard(pid); item_info.pop(pid, None)
+                        my_state['known'].discard(pid); my_state['items'].pop(pid, None)
             
-            # 유령 데이터 정리
-            v_labels = {t['label'] for t in tasks}
-            v_urls = {t['url'] for t in tasks}
-            for pid in list(known_in_stock_ids):
-                info = item_info.get(pid, {})
+            v_urls, v_labels = {t['url'] for t in tasks}, {t['label'] for t in tasks}
+            for pid in list(my_state['known']):
+                info = my_state['items'].get(pid, {})
                 if info.get('url') not in v_urls or info.get('label') not in v_labels:
-                    known_in_stock_ids.discard(pid); item_info.pop(pid, None)
+                    my_state['known'].discard(pid); my_state['items'].pop(pid, None)
             
-            temp_counts = {l: 0 for l in v_labels}
-            for pid in known_in_stock_ids:
-                lbl = item_info.get(pid, {}).get('label')
-                if lbl in temp_counts: temp_counts[lbl] += 1
-            category_counts = temp_counts
+            t_counts = {l: 0 for l in v_labels}
+            for pid in my_state['known']:
+                lbl = my_state['items'].get(pid, {}).get('label')
+                if lbl in t_counts: t_counts[lbl] += 1
+            my_state['counts'] = t_counts
 
-        check_commands()
-        target_cycle = 18.2
         elapsed = time.time() - cycle_start
+        with lock: my_state['cycle'] = elapsed
         time.sleep(max(0.1, target_cycle - elapsed))
-        measured_cycle_time = time.time() - cycle_start
+
+if __name__ == "__main__":
+    send_message("🟢 [V2.99999_OMEGA] 구동 시작.\n완벽하게 독립된 듀얼 코어로 감시를 시작합니다.")
+    
+    t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
+    t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
+    t1.start(); t2.start()
+    
+    while True:
+        check_commands()
+        time.sleep(1)
