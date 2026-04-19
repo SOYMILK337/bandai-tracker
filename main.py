@@ -57,6 +57,7 @@ def restart_myself():
         except: time.sleep(2)
 
 def clean_product_name(raw_name):
+    # 불필요한 노이즈 제거
     p = r'좋아요|장바구니|\d{1,3}(,\d{3})*원|구매진행중|예약진행중|오픈예정|품절|\d{2}\.\d{2}까지'
     return re.sub(p, '', raw_name).strip()
 
@@ -72,7 +73,7 @@ def check_commands():
                 if "message" in update and "text" in update["message"]:
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [마스터피스 V2.7 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg = f"📊 [마스터피스 V2.8 - 19s 포식자 엔진]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
                             msg += f"\n\n⏱️ 전체 주기: {measured_cycle_time:.1f}초 (실측 타겟: 19s)"
                             msg += f"\n⏱️ 주소당 평균: {avg_scan_time:.2f}초"
@@ -85,6 +86,10 @@ def scan_task(task):
     global proxy_index
     url, label = task['url'], task['label']
     task_start = time.time()
+    
+    # URL 정규화
+    if not url.startswith("http"): url = "https://" + url
+
     for _ in range(2):
         try:
             with lock:
@@ -92,15 +97,26 @@ def scan_task(task):
                 proxy_index += 1
             proxy_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
+            
+            # 1차 검증: 응답 길이
             if len(res.text) < 1000: continue
             
-            # 🚨 뇌정지 방지: html.parser가 멈추지 않도록 불필요한 선언부 제거 후 파싱
-            safe_html = res.text.replace('<!DOCTYPE html>', '').replace('xmlns="http://www.w3.org/1999/xhtml"', '')
-            soup = BeautifulSoup(safe_html, 'html.parser')
+            # 🚨 2차 검증: [진품 인증] 쇼핑몰 고유 낙인 확인 (IP 차단/캡챠 방어)
+            html_lower = res.text.lower()
+            if "naver.com" in url and "naver" not in html_lower: continue 
+            if "bnkrmall" in url and "bnkr" not in html_lower: continue 
+
+            # 🚨 3차 검증: [불도저 패치] 파서 뇌정지 유발 요소 제거
+            clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+            clean_html = re.sub(r'<style.*?</style>', '', clean_html, flags=re.DOTALL | re.IGNORECASE)
+            clean_html = re.sub(r'', '', clean_html, flags=re.DOTALL)
+            clean_html = clean_html.replace('<!DOCTYPE html>', '').replace('xmlns="http://www.w3.org/1999/xhtml"', '')
+            
+            soup = BeautifulSoup(clean_html, 'html.parser')
             data = {}
             
             if "naver.com" in url:
-                # 🚨 [만능 네이버 패치] 특정 스토어 이름(bandai)에 종속되지 않고 모든 상품 탐색
+                # 네이버 스토어 모든 상품 탐색
                 links = soup.find_all('a', href=re.compile(r'/products/\d+'))
                 for link in links:
                     text = link.get_text(strip=True)
@@ -116,29 +132,23 @@ def scan_task(task):
                                     name = item.get('value'); break
                         except: pass
                     
-                    if not name: 
-                        name = text.replace('좋아요', '').replace('장바구니', '').strip()
-                        
-                    if len(name) >= 3:
-                        data[p_id] = clean_product_name(name)
+                    if not name: name = text.replace('좋아요', '').replace('장바구니', '').strip()
+                    if len(name) >= 3: data[p_id] = clean_product_name(name)
             else:
-                # 🚨 [프반 + 짧은 이름 패치] gno= 뿐만 아니라 pno= (프리미엄 반다이)까지 싹쓸이
+                # 본진 + 프리미엄 반다이(pno) 레이더
                 links = soup.find_all('a', href=re.compile(r'(gno|pno)=\d+'))
                 for link in links:
                     text = link.get_text(strip=True)
                     text_lower = text.lower()
                     
-                    if 'sold out' in text_lower or '예약종료' in text or '품절' in text: 
-                        continue
+                    # SOLD OUT, 예약종료 필터링
+                    if 'sold out' in text_lower or '예약종료' in text or '품절' in text: continue
                     
                     href = link.get('href')
-                    if 'gno=' in href: 
-                        p_id = "B_" + href.split('gno=')[-1].split('&')[0]
-                    else: 
-                        p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
+                    if 'gno=' in href: p_id = "B_" + href.split('gno=')[-1].split('&')[0]
+                    else: p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
                     
-                    if len(text) >= 5:  
-                        data[p_id] = clean_product_name(text)
+                    if len(text) >= 5: data[p_id] = clean_product_name(text)
             
             return label, data, url, True, time.time() - task_start
         except: continue
@@ -153,8 +163,7 @@ if __name__ == "__main__":
             if line.startswith("#"): lbl = line.replace("#", "").strip()
             elif line: tasks.append({"url": line, "label": lbl})
 
-    # ✅ 부팅 메시지
-    send_message("🟢 [마스터피스 V2.7] 엔진 가동. 방어막 활성화 및 19초 주기를 보장합니다.")
+    send_message("🟢 [마스터피스 V2.8] 엔진 가동. 진품 인증 및 불도저 방어막이 활성화되었습니다.")
 
     while True:
         cycle_start = time.time()
@@ -162,6 +171,7 @@ if __name__ == "__main__":
         curr_hm = now_kst.hour * 100 + now_kst.minute
         elapsed_from_boot = time.time() - start_time
 
+        # 자동 재시작 로직
         if 1435 <= curr_hm <= 1445 and elapsed_from_boot > 3600: restart_myself(); break
         if elapsed_from_boot > 21000:
             if not (1450 <= curr_hm <= 1615): restart_myself(); break
@@ -182,8 +192,8 @@ if __name__ == "__main__":
                         now_str = datetime.now(KST).strftime('%H:%M:%S')
                         if "naver.com" in url: last_naver_time = now_str
                         else: last_bnkr_time = now_str
-                        new_items = set(data.keys()) - known_in_stock_ids
                         
+                        new_items = set(data.keys()) - known_in_stock_ids
                         if cycle_count > 1 and new_items:
                             alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]}" for pid in new_items]
                             send_message(f"🟢 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
@@ -199,6 +209,7 @@ if __name__ == "__main__":
         with lock:
             if durations: avg_scan_time = sum(durations) / len(durations)
             if cycle_count > 1:
+                # 이번 사이클 성공 주소에서 사라진 상품만 품절 처리 (가짜 품절 방지)
                 gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_to_url.get(pid) in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{all_seen_names[pid]}" for pid in gone_ids]
@@ -212,7 +223,7 @@ if __name__ == "__main__":
                 if lbl in temp_counts: temp_counts[lbl] += 1
             category_counts = temp_counts
 
-        # ✅ 10만 건 기준 19초 실측을 위한 영점 조절 (18.0)
+        # 19초 주기 타겟 설정
         target_cycle = 18.0
         elapsed_so_far = time.time() - cycle_start
         remaining_wait = max(5.0, target_cycle - elapsed_so_far)
