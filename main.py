@@ -20,7 +20,7 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 🚨 뇌의 좌우 분리: 반몰과 네반몰의 데이터를 완벽히 격리
+# 🚨 독립된 뇌 구조
 group_state = {
     "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0},
     "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "cycle": 0.0}
@@ -60,18 +60,36 @@ def check_commands():
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
+                        
+                        # 🚨 [개선 2] list.txt의 원본 순서를 칼같이 읽어와서 배열 생성
+                        ordered_labels = []
+                        try:
+                            with open("list.txt", "r", encoding="utf-8") as f:
+                                lbl = "기타"
+                                for line in f:
+                                    line = line.strip()
+                                    if line.startswith("#"): lbl = line.replace("#", "").strip()
+                                    if lbl not in ordered_labels and line:
+                                        ordered_labels.append(lbl)
+                        except: pass
+                        
                         with lock:
                             total_known = len(group_state["반몰"]["known"]) + len(group_state["네반몰"]["known"])
-                            merged_counts = {}
+                            
+                            # 정렬된 배열을 기반으로 카운트 병합
+                            merged_counts = {l: 0 for l in ordered_labels}
                             for g in ["반몰", "네반몰"]:
                                 for l, c in group_state[g]["counts"].items():
-                                    merged_counts[l] = merged_counts.get(l, 0) + c
+                                    if l in merged_counts: merged_counts[l] += c
+                                    else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V2.99999_OMEGA - 절대 완성판]\n"
-                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} ({group_state['반몰']['cycle']:.1f}s)\n"
-                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} ({group_state['네반몰']['cycle']:.1f}s)\n\n"
-                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items()])
-                            msg += f"\n📦 전체 추적: {total_known}개"
+                            msg = f"📊 [V2.99999_OMEGA - 퍼펙트]\n"
+                            # 🚨 [개선 1] 실측 주기를 명확하게 표기
+                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ {group_state['반몰']['cycle']:.1f}s)\n"
+                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ {group_state['네반몰']['cycle']:.1f}s)\n\n"
+                            
+                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
+                            msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
     except: pass
 
@@ -121,7 +139,6 @@ def scan_task(task):
         except: continue
     return label, {}, url, False
 
-# 🚨 완벽히 독립된 감시 엔진
 def monitoring_engine(group_name, target_cycle):
     my_state = group_state[group_name]
     cycle_count = 0
@@ -189,12 +206,13 @@ def monitoring_engine(group_name, target_cycle):
                 if lbl in t_counts: t_counts[lbl] += 1
             my_state['counts'] = t_counts
 
-        elapsed = time.time() - cycle_start
-        with lock: my_state['cycle'] = elapsed
-        time.sleep(max(0.1, target_cycle - elapsed))
+        # 🚨 [개선 1] 스톱워치 측정 위치 수정 (잠자기 완료 후 측정해야 진짜 실측 주기)
+        elapsed_work = time.time() - cycle_start
+        time.sleep(max(0.1, target_cycle - elapsed_work))
+        with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🟢 [V2.99999_OMEGA] 구동 시작.\n완벽하게 독립된 듀얼 코어로 감시를 시작합니다.")
+    send_message("🟢 [V2.99999_OMEGA_PERFECT] 구동 시작.\n실측 주기 표기 및 카테고리 정렬 버그 수정 완료.")
     
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
