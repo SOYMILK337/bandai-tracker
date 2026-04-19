@@ -1,27 +1,27 @@
 # 1. MG
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=182&soldout=Y&endGoods=Y
 # 2. RG
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=181&soldout=Y&endGoods=Y
 # 3. PG
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=183&soldout=Y&endGoods=Y
 # 4. HG 수성의 마녀
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=658&soldout=Y&endGoods=Y
 # 5. HG SEED 계열
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=284,876,294&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=284,876,294&soldout=Y&endGoods=Y
 # 6. HG 우주세기 클래식
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=280,301,300,281&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=280,301,300,281&soldout=Y&endGoods=Y
 # 7. HG 우주세기 후기
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=282,780,283&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=282,780,283&soldout=Y&endGoods=Y
 # 8. HG 비우주세기 인기작
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=285,286,855&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=285,286,855&soldout=Y&endGoods=Y
 # 9. HG 오리진/최신작
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=291,1080&soldout=Y&endGoods=Y
 # 10. HG 빌드/기타
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&chkseries=287,290,293,45,895&soldout=Y&endGoods=Y
 # 11. MGSD
-https://m.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=&page=1&sale=&soldout=Y&reserved=&rowprice=&highprice=&chkbrand=546&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
+https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=&page=1&sale=&soldout=Y&reserved=&rowprice=&highprice=&chkbrand=546&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
 # 12. 프리미엄 반다이 건프라
-https://m.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=Y
+https://www.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=Y
 # 13. [NAVER] PG
 https://brand.naver.com/bandai/category/7469c4bfaba0478ca06c44cadd9dfdeb?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
 # 14. [NAVER] MG
