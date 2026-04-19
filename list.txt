@@ -21,7 +21,7 @@ https://www.bnkrmall.co.kr/goods/category.do?cate=1576&page=1&chkbrand=180,403&c
 # 11. MGSD
 https://www.bnkrmall.co.kr/goods/category.do?cate=1576&pview=&psort=&cateName=&page=1&sale=&soldout=Y&reserved=&rowprice=&highprice=&chkbrand=546&chkseries=&brandIdx=&seriesIdx=&drawCnt=0&drawIdx=&brandCnt=26&seriesCnt=59&realdrawCnt=0&age=&etc=&endGoods=Y
 # 12. 프리미엄 반다이 건프라
-https://www.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=
+https://www.bnkrmall.co.kr/premium/p_category.do?gun=Y&ani=&ta=&ban=&toy=&etc=&soldout=Y
 # 13. [NAVER] PG
 https://brand.naver.com/bandai/category/7469c4bfaba0478ca06c44cadd9dfdeb?st=POPULAR&dt=BIG_IMAGE&page=1&size=80&filters=oa
 # 14. [NAVER] MG
