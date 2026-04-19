@@ -1,20 +1,13 @@
-import os
-import requests
-import time
-import re
-import json
-import html
+import os, requests, time, re, json, html, urllib.parse, threading
 from bs4 import BeautifulSoup
-import urllib.parse
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 # 1. 시스템 설정
-start_time = time.time()
+ST_TIME = time.time() # 봇 시작 시간 기록
 KST = timezone(timedelta(hours=9))
 
-# ✅ 프록시 ID (최적의 5개 정예 요원)
+# ✅ 정예 프록시 요원 (5개)
 PROXY_IDS = [
     "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
     "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
@@ -32,10 +25,8 @@ repo_full_name = os.environ.get('GITHUB_REPOSITORY')
 known_in_stock_ids = set()
 item_info = {} 
 last_bnkr_time, last_naver_time = "대기 중", "대기 중"
-category_counts = {}
-cycle_count = 0
-last_update_id = -1
-measured_cycle_time = 0.0
+category_counts, cycle_count = {}, 0
+last_update_id, measured_cycle_time = -1, 0.0
 lock = threading.Lock()
 
 def send_message(text):
@@ -62,21 +53,17 @@ def check_commands():
     global last_update_id
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
-        # 🚨 [최종 보안 및 속도] 타임아웃 0.1s로 극강의 반응성과 속도 유지
         res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.1}, timeout=1)
         response = res.json()
         if response.get("ok"):
             for update in response["result"]:
                 last_update_id = update["update_id"]
-                if "message" in update and "text" in update["message"]:
-                    sender_id = str(update["message"]["chat"]["id"])
-                    if sender_id != str(chat_id): continue
+                if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     if update["message"]["text"] == "/상태":
                         with lock:
-                            msg = f"📊 [V2.999 - THE ULTIMATE]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n\n"
+                            msg = f"📊 [V2.9999 - THE ETERNAL]\n✅ 본진: {last_bnkr_time}\n✅ 네이버: {last_naver_time}\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in category_counts.items()])
-                            msg += f"\n\n⏱️ 실측 주기: {measured_cycle_time:.1f}초 (타겟 19s)"
-                            msg += f"\n📦 추적 상품: {len(known_in_stock_ids)}개"
+                            msg += f"\n⏱️ 주기: {measured_cycle_time:.1f}s | 📦 추적: {len(known_in_stock_ids)}개"
                         send_message(msg)
     except: pass
 
@@ -85,66 +72,50 @@ def scan_task(task):
     global proxy_index
     url, label = task['url'], task['label']
     if not url.startswith("http"): url = "https://" + url
-
     for _ in range(2):
         try:
             with lock:
-                curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]
-                proxy_index += 1
-            proxy_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
-            res = requests.get(proxy_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
+                curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
+            p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
+            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
+            if len(res.text) < 1000 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
-            if len(res.text) < 1000: continue
-            if "naver.com" in url and "naver" not in res.text.lower(): continue 
-            if "bnkrmall" in url and "bnkr" not in res.text.lower(): continue 
-
             clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
             soup = BeautifulSoup(clean_html, 'html.parser')
             data = {}
-            
             if "naver.com" in url:
-                links = soup.find_all('a', href=re.compile(r'/products/\d+'))
-                for link in links:
+                for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
                     if '품절' in link.get_text(): continue
                     p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
-                    name, stock = "", ""
-                    attr = link.get('data-shp-contents-dtl')
+                    name, stock, attr = "", "", link.get('data-shp-contents-dtl')
                     if attr:
                         try:
-                            json_data = json.loads(attr)
-                            for item in json_data:
+                            for item in json.loads(attr):
                                 if item.get('key') == 'chnl_prod_nm': name = item.get('value')
                                 if item.get('key') == 'stk_qty': stock = str(item.get('value'))
                         except: pass
                     if not name: name = link.get_text(strip=True)
-                    if len(name) >= 3: 
-                        data[p_id] = {"name": clean_product_name(name), "stock": stock}
+                    if len(name) >= 3: data[p_id] = {"name": clean_product_name(name), "stock": stock}
             else:
-                links = soup.find_all('a', href=re.compile(r'(gno|pno)=\d+'))
-                for link in links:
+                for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
                     txt = link.get_text(strip=True).lower()
-                    if 'sold out' in txt or '예약종료' in txt or '품절' in txt: continue
-                    
+                    if any(x in txt for x in ['sold out', '예약종료', '품절']): continue
                     href = link.get('href')
-                    if 'gno=' in href: p_id = "B_" + href.split('gno=')[-1].split('&')[0]
-                    else: p_id = "PB_" + href.split('pno=')[-1].split('&')[0]
-                    
+                    p_id = ("B_" if 'gno=' in href else "PB_") + (href.split('gno=')[-1] if 'gno=' in href else href.split('pno=')[-1]).split('&')[0]
                     name_tag = link.find('h5')
-                    pure_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
-                    if len(pure_name) >= 3: 
-                        data[p_id] = {"name": clean_product_name(pure_name), "stock": ""}
-            
+                    p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
+                    if len(p_name) >= 3: data[p_id] = {"name": clean_product_name(p_name), "stock": ""}
             return label, data, url, True
         except: continue
     return label, {}, url, False
 
 if __name__ == "__main__":
-    send_message("🟢 [V2.999 - THE ULTIMATE] 가동. 모든 예외 상황이 통제된 최종 완전체입니다.")
-
+    send_message("🟢 [V2.9999 - THE ETERNAL] 가동.\n아들 군대 보내는 마음으로 챙긴 최종 생존 패키지입니다.")
     while True:
         cycle_start = time.time()
+        # 🚨 [생존 로직] 실행 5시간 40분 경과 시 자동 재시작 (GitHub 6시간 벽 돌파)
+        if time.time() - ST_TIME > 20400: restart_myself(); break
         
-        # 1. 태스크 로드
         tasks = []
         try:
             with open("list.txt", "r", encoding="utf-8") as f:
@@ -155,15 +126,9 @@ if __name__ == "__main__":
                     elif line: tasks.append({"url": line, "label": lbl})
         except: pass
 
-        # 2. 자동 재시작 로직
-        now_kst = datetime.now(KST)
-        if 1435 <= (now_kst.hour * 100 + now_kst.minute) <= 1445: restart_myself(); break
-
         cycle_count += 1
-        current_cycle_ids = set()
-        success_urls = set()
+        current_cycle_ids, success_urls = set(), set()
         
-        # 3. 병렬 스캔
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             for future in as_completed(future_to_url):
@@ -176,50 +141,33 @@ if __name__ == "__main__":
                         
                         new_items = set(data.keys()) - known_in_stock_ids
                         if cycle_count > 1 and new_items:
-                            alert_list = []
-                            for pid in new_items:
-                                prefix = "[네이버] " if pid.startswith('N_') else "[본진] "
-                                s_info = f" [재고: {data[pid]['stock']}개]" if data[pid]['stock'] else ""
-                                alert_list.append(f"{prefix}{data[pid]['name']}{s_info}")
-                            send_message(f"🟢 신규/재입고 ({now_str})\n" + "\n".join(alert_list))
+                            alert_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
+                            for i in range(0, len(alert_list), 30):
+                                send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
                         
                         known_in_stock_ids.update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
-                        for pid, info in data.items():
-                            item_info[pid] = {"name": info['name'], "url": url, "label": label}
+                        for pid, info in data.items(): item_info[pid] = {"name": info['name'], "url": url, "label": label}
 
-        # 4. 장부 정리 및 품절 처리
         with lock:
             if cycle_count > 1:
                 gone_ids = [pid for pid in (known_in_stock_ids - current_cycle_ids) if item_info.get(pid, {}).get('url') in success_urls]
                 if gone_ids:
                     gone_list = [f"{('[네이버] ' if pid.startswith('N_') else '[본진] ')}{item_info[pid]['name']}" for pid in gone_ids]
-                    for i in range(0, len(gone_list), 30):
-                        send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
+                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
                     for pid in gone_ids: 
-                        known_in_stock_ids.discard(pid)
-                        if pid in item_info: del item_info[pid]
+                        known_in_stock_ids.discard(pid); item_info.pop(pid, None)
             
-            temp_counts = {t['label']: 0 for t in tasks}
-            valid_urls = {t['url'] for t in tasks}
+            temp_counts, valid_urls = {t['label']: 0 for t in tasks}, {t['url'] for t in tasks}
             for pid in list(known_in_stock_ids):
                 info = item_info.get(pid, {})
-                if info.get('url') in valid_urls:
-                    lbl = info.get('label')
-                    if lbl in temp_counts: temp_counts[lbl] += 1
-                else: 
-                    known_in_stock_ids.discard(pid)
-                    if pid in item_info: del item_info[pid]
+                if info.get('url') in valid_urls: temp_counts[info['label']] = temp_counts.get(info['label'], 0) + 1
+                else: known_in_stock_ids.discard(pid); item_info.pop(pid, None)
             category_counts = temp_counts
 
-        # 5. 🚨 정밀 19초 주기 사수 및 명령어 체크
         check_commands()
-        
-        target_cycle = 18.2 # 연산 오차 고려
-        loop_end = time.time()
-        wait_time = max(0.1, target_cycle - (loop_end - cycle_start))
-        time.sleep(wait_time)
-        
-        # 🚨 [마지막 개선] 실제 한 바퀴가 정확히 몇 초 걸렸는지 기록
-        measured_cycle_time = time.time() - cycle_start
+        target_cycle = 18.2
+        elapsed = time.time() - cycle_start
+        measured_cycle_time = elapsed
+        time.sleep(max(0.1, target_cycle - elapsed))
