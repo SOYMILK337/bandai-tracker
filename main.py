@@ -1,4 +1,4 @@
-import os, requests, time, re, json, html, urllib.parse, threading, random
+import os, requests, time, re, json, html, urllib.parse, threading
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
 
-# 🚨 [보안 패치] 프록시 ID 노출 방지 로직 (GitHub Secrets 연동)
+# 프록시 ID 노출 방지 로직 (GitHub Secrets 연동)
 proxy_secret_str = os.environ.get('PROXY_SECRET', '')
 PROXY_IDS = [p.strip() for p in proxy_secret_str.split(',')] if proxy_secret_str else []
 
@@ -16,7 +16,6 @@ chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 github_pat = os.environ.get('MY_GITHUB_PAT')
 repo_full_name = os.environ.get('GITHUB_REPOSITORY') 
 
-# 🚨 [개선] 순수 작업 시간(work_time) 기록 변수 추가
 group_state = {
     "반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "work_time": 0.0, "cycle": 0.0},
     "네반몰": {"known": set(), "items": {}, "counts": {}, "last_time": "대기 중", "work_time": 0.0, "cycle": 0.0}
@@ -87,9 +86,9 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.3_IRON_WALL]\n"
-                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
-                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
+                            msg = f"📊 [V3.4]\n"
+                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
+                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
                             msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
@@ -101,18 +100,17 @@ def scan_task(task):
     url, label = task['url'], task['label']
     if not url.startswith("http"): url = "https://" + url
     
-    # 🚨 [스텔스 캐시 무효화] 서버 차단 위험 없이 캐시를 우회하기 위한 랜덤 숫자 꼬리표
-    stealth_val = random.randint(1, 99999)
-    busted_url = f"{url}&v={stealth_val}" if "?" in url else f"{url}?v={stealth_val}"
-    
     for _ in range(2):
         try:
             with lock:
-                if not PROXY_IDS: return label, {}, url, False # 🚨 금고가 비어있을 때의 에러 방지
+                if not PROXY_IDS: return label, {}, url, False 
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
-            p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(busted_url, safe='')
             
-            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=25)
+            # 본진 타격을 피하고 정상 속도를 내기 위해 원본 URL 그대로 요청
+            p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
+            
+            # 응답 지연이 전체 사이클을 망치지 않도록 타임아웃을 15초로 단축
+            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
             if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
             clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
@@ -184,7 +182,8 @@ def monitoring_engine(group_name, target_cycle):
         cycle_count += 1
         current_cycle_ids, success_urls = set(), set()
         
-        with ThreadPoolExecutor(max_workers=15) as executor:
+        # 목록이 길어졌을 때를 대비해 워커(스레드) 수를 20개로 증가
+        with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             for future in as_completed(future_to_url):
                 label, data, url, is_success = future.result()
@@ -218,7 +217,6 @@ def monitoring_engine(group_name, target_cycle):
                 if lbl in t_counts: t_counts[lbl] += 1
             my_state['counts'] = t_counts
 
-        # 🚨 [개선] 순수 작업 시간 기록 후, 남은 시간만큼 대기
         elapsed_work = time.time() - cycle_start
         with lock: my_state['work_time'] = elapsed_work
         
@@ -226,7 +224,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.3_IRON_WALL] 무제한 무료 사냥 모드 돌입.\n보안과 성능이 모두 확보되었습니다.")
+    send_message("🛡️ [V3.4] 가동.\n불필요한 캐시 우회 로직 제거 및 속도 안정화 패치 완료.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
