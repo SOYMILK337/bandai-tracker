@@ -66,7 +66,10 @@ def check_commands():
             for update in response["result"]:
                 last_update_id = update["update_id"]
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
-                    if update["message"]["text"] == "/상태":
+                    cmd = update["message"]["text"]
+                    
+                    # 🚨 기존 /상태 명령어
+                    if cmd == "/상태":
                         ordered_labels = []
                         try:
                             with open("list.txt", "r", encoding="utf-8") as f:
@@ -85,11 +88,25 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.5]\n"
+                            msg = f"📊 [V3.6_SNIPER]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
                             msg += f"\n\n📦 전체 추적: {total_known}개"
+                        send_message(msg)
+                        
+                    # 🚨 신규 탑재된 /네반몰재고 명령어
+                    elif cmd == "/네반몰재고":
+                        with lock:
+                            items_with_stock = []
+                            for pid, info in group_state["네반몰"]["items"].items():
+                                if info.get('stock') and str(info['stock']).isdigit():
+                                    items_with_stock.append(f"📍 {info['name']} [재고: {info['stock']}개]")
+                            
+                            if items_with_stock:
+                                msg = "📦 [네반몰 실시간 재고 파악 현황]\n\n" + "\n".join(items_with_stock)
+                            else:
+                                msg = "📦 [네반몰 실시간 재고 파악 현황]\n\n현재 숫자로 파악된 재고가 없습니다.\n(품절 상태이거나, 아직 입고되지 않은 상품들입니다.)"
                         send_message(msg)
     except: pass
 
@@ -106,20 +123,19 @@ def scan_task(task):
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
-            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+            # 🚨 타임아웃을 8초로 단축하여 느린 프록시에 묶여 전체 작업이 지연되는 것을 방지
+            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
             
             if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
             data = {}
             
             if "naver.com" in url:
-                # 🚨 [V3.5 핵심: 네이버 숨겨진 재고(JSON) 추적기]
                 parsed_naver_json = False
                 state_match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.+?\});\s*</script>', res.text)
                 if state_match:
                     try:
                         state_data = json.loads(state_match.group(1))
-                        # JSON 내부를 샅샅이 뒤지는 재귀 함수
                         def find_products(d):
                             if isinstance(d, dict):
                                 if 'productNo' in d and 'name' in d and 'productStatusType' in d:
@@ -132,7 +148,7 @@ def scan_task(task):
                             p_id = "N_" + str(prod.get('productNo'))
                             p_name = str(prod.get('name', ''))
                             status = str(prod.get('productStatusType', ''))
-                            stock = str(prod.get('stockQuantity', '')) # 드디어 확보한 찐 재고량!
+                            stock = str(prod.get('stockQuantity', ''))
                             
                             if status == "OUTOFSTOCK" or '품절' in p_name: continue
                             if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
@@ -143,7 +159,6 @@ def scan_task(task):
                                 parsed_naver_json = True
                     except: pass
                 
-                # JSON 파싱에 실패했을 경우를 대비한 기존 구형 백업 스캐너
                 if not parsed_naver_json:
                     clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
                     soup = BeautifulSoup(clean_html, 'html.parser')
@@ -164,7 +179,6 @@ def scan_task(task):
                     soup.decompose()
 
             else:
-                # 반다이몰 파싱 로직
                 clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
                 soup = BeautifulSoup(clean_html, 'html.parser')
                 for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
@@ -227,13 +241,15 @@ def monitoring_engine(group_name, target_cycle):
                         my_state['last_time'] = now_str
                         new_items = set(data.keys()) - my_state['known']
                         if cycle_count > 1 and new_items:
-                            # 🚨 재고량이 존재할 경우 [재고: n개] 형식으로 알림 발송
                             alert_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
                             for i in range(0, len(alert_list), 30): send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
                         my_state['known'].update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
-                        for pid, info in data.items(): my_state['items'][pid] = {"name": info['name'], "url": url, "label": label}
+                        
+                        # 🚨 /네반몰재고 명령어를 위해 봇의 메모리에 stock 값을 확실히 저장
+                        for pid, info in data.items(): 
+                            my_state['items'][pid] = {"name": info['name'], "url": url, "label": label, "stock": info.get('stock', '')}
 
         with lock:
             if cycle_count > 1:
@@ -259,7 +275,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.5] 가동.\n네이버 스토어 심층 재고(JSON) 추적기가 활성화되었습니다.")
+    send_message("🛡️ [V3.6_SNIPER] 가동.\n네반몰 수동 재고 브리핑 기능(/네반몰재고) 및 스피드업 패치 완료.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
