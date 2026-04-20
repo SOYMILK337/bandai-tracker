@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
 
-# 프록시 ID 노출 방지 로직 (GitHub Secrets 연동)
 proxy_secret_str = os.environ.get('PROXY_SECRET', '')
 PROXY_IDS = [p.strip() for p in proxy_secret_str.split(',')] if proxy_secret_str else []
 
@@ -86,7 +85,7 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.4]\n"
+                            msg = f"📊 [V3.5]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
@@ -106,32 +105,68 @@ def scan_task(task):
                 if not PROXY_IDS: return label, {}, url, False 
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             
-            # 본진 타격을 피하고 정상 속도를 내기 위해 원본 URL 그대로 요청
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
-            
-            # 응답 지연이 전체 사이클을 망치지 않도록 타임아웃을 15초로 단축
             res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+            
             if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
             
-            clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
-            soup = BeautifulSoup(clean_html, 'html.parser')
             data = {}
+            
             if "naver.com" in url:
-                for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
-                    if '품절' in link.get_text(): continue
-                    p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
-                    name, stock, attr = "", "", link.get('data-shp-contents-dtl')
-                    if attr:
-                        try:
-                            for item in json.loads(attr):
-                                if item.get('key') == 'chnl_prod_nm': name = str(item.get('value', ''))
-                                if item.get('key') == 'stk_qty': stock = str(item.get('value', ''))
-                        except: pass
-                    if not name: name = link.get_text(strip=True)
-                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower(): continue
-                    c_name = clean_product_name(name)
-                    if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": stock}
+                # 🚨 [V3.5 핵심: 네이버 숨겨진 재고(JSON) 추적기]
+                parsed_naver_json = False
+                state_match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.+?\});\s*</script>', res.text)
+                if state_match:
+                    try:
+                        state_data = json.loads(state_match.group(1))
+                        # JSON 내부를 샅샅이 뒤지는 재귀 함수
+                        def find_products(d):
+                            if isinstance(d, dict):
+                                if 'productNo' in d and 'name' in d and 'productStatusType' in d:
+                                    yield d
+                                for k, v in d.items(): yield from find_products(v)
+                            elif isinstance(d, list):
+                                for item in d: yield from find_products(item)
+                        
+                        for prod in find_products(state_data):
+                            p_id = "N_" + str(prod.get('productNo'))
+                            p_name = str(prod.get('name', ''))
+                            status = str(prod.get('productStatusType', ''))
+                            stock = str(prod.get('stockQuantity', '')) # 드디어 확보한 찐 재고량!
+                            
+                            if status == "OUTOFSTOCK" or '품절' in p_name: continue
+                            if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
+                            
+                            c_name = clean_product_name(p_name)
+                            if len(c_name) >= 3: 
+                                data[p_id] = {"name": c_name, "stock": stock}
+                                parsed_naver_json = True
+                    except: pass
+                
+                # JSON 파싱에 실패했을 경우를 대비한 기존 구형 백업 스캐너
+                if not parsed_naver_json:
+                    clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+                    soup = BeautifulSoup(clean_html, 'html.parser')
+                    for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
+                        if '품절' in link.get_text(): continue
+                        p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
+                        name, stock_bk, attr = "", "", link.get('data-shp-contents-dtl')
+                        if attr:
+                            try:
+                                for item in json.loads(attr):
+                                    if item.get('key') == 'chnl_prod_nm': name = str(item.get('value', ''))
+                                    if item.get('key') == 'stk_qty': stock_bk = str(item.get('value', ''))
+                            except: pass
+                        if not name: name = link.get_text(strip=True)
+                        if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower(): continue
+                        c_name = clean_product_name(name)
+                        if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": stock_bk}
+                    soup.decompose()
+
             else:
+                # 반다이몰 파싱 로직
+                clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+                soup = BeautifulSoup(clean_html, 'html.parser')
                 for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
                     txt = link.get_text(strip=True).lower()
                     if any(x in txt for x in ['sold out', '예약종료', '품절']): continue
@@ -142,9 +177,9 @@ def scan_task(task):
                     if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
                     c_name = clean_product_name(p_name)
                     if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
-            
-            if not data: soup.decompose(); continue
-            soup.decompose()
+                soup.decompose()
+
+            if not data: continue
             return label, data, url, True
         except: continue
     return label, {}, url, False
@@ -182,7 +217,6 @@ def monitoring_engine(group_name, target_cycle):
         cycle_count += 1
         current_cycle_ids, success_urls = set(), set()
         
-        # 목록이 길어졌을 때를 대비해 워커(스레드) 수를 20개로 증가
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             for future in as_completed(future_to_url):
@@ -193,6 +227,7 @@ def monitoring_engine(group_name, target_cycle):
                         my_state['last_time'] = now_str
                         new_items = set(data.keys()) - my_state['known']
                         if cycle_count > 1 and new_items:
+                            # 🚨 재고량이 존재할 경우 [재고: n개] 형식으로 알림 발송
                             alert_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
                             for i in range(0, len(alert_list), 30): send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
                         my_state['known'].update(data.keys())
@@ -224,7 +259,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.4] 가동.\n불필요한 캐시 우회 로직 제거 및 속도 안정화 패치 완료.")
+    send_message("🛡️ [V3.5] 가동.\n네이버 스토어 심층 재고(JSON) 추적기가 활성화되었습니다.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
