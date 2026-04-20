@@ -18,6 +18,7 @@ jobs:
       MY_GITHUB_PAT: ${{ secrets.MY_GITHUB_PAT }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PROXY_SECRET: ${{ secrets.PROXY_SECRET }} # 🚨 [보안 패치] 이 줄이 추가되었습니다.
 
     steps:
       - name: Checkout
