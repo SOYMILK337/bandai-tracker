@@ -25,6 +25,7 @@ lock = threading.Lock()
 is_restarting = False 
 
 def send_message(text):
+    if not token or not chat_id: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try: requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=10)
     except: pass
@@ -58,6 +59,7 @@ def clean_product_name(raw_name):
 
 def check_commands():
     global last_update_id
+    if not token: return
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
         res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.1}, timeout=1)
@@ -79,19 +81,24 @@ def check_commands():
                                     if lbl not in ordered_labels and line: ordered_labels.append(lbl)
                         except: pass
                         
+                        # 🚨 [수정] 락(Lock)을 가장 짧은 시간만 쥐고 데이터를 복사한 뒤 즉시 해제합니다.
                         with lock:
                             total_known = len(group_state["반몰"]["known"]) + len(group_state["네반몰"]["known"])
+                            b_time, b_wt, b_cy = group_state['반몰']['last_time'], group_state['반몰']['work_time'], group_state['반몰']['cycle']
+                            nb_time, nb_wt, nb_cy = group_state['네반몰']['last_time'], group_state['네반몰']['work_time'], group_state['네반몰']['cycle']
+                            
                             merged_counts = {l: 0 for l in ordered_labels}
                             for g in ["반몰", "네반몰"]:
                                 for l, c in group_state[g]["counts"].items():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.10_RESCUE]\n"
-                            msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
-                            msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
-                            msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
-                            msg += f"\n\n📦 전체 추적: {total_known}개"
+                        # 락이 풀린 상태에서 안전하게 통신(메시지 발송) 진행
+                        msg = f"📊 [V3.11_FLAWLESS]\n"
+                        msg += f"🔥 반몰: {b_time} (⏱ 작업 {b_wt:.1f}s / 주기 {b_cy:.1f}s)\n"
+                        msg += f"🍀 네반몰: {nb_time} (⏱ 작업 {nb_wt:.1f}s / 주기 {nb_cy:.1f}s)\n\n"
+                        msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
+                        msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
                         
                     elif cmd == "/네반몰재고":
@@ -107,7 +114,7 @@ def check_commands():
                                     if not PROXY_IDS: return None
                                     real_id = pid.replace("N_", "")
                                     d_url = f"https://smartstore.naver.com/bandai/products/{real_id}"
-                                    curr_id = random.choice(PROXY_IDS) # 🚨 네이버 API도 반드시 프록시 우회
+                                    curr_id = random.choice(PROXY_IDS)
                                     p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(d_url, safe='')
                                     
                                     s_res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
@@ -143,7 +150,6 @@ def scan_task(task):
                 if not PROXY_IDS: return label, {}, url, False 
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             
-            # 🚨 반몰, 네반몰 모두 100% 프록시로 복귀 (GitHub 해외 IP 차단 방어)
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
             res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
             
@@ -255,51 +261,74 @@ def monitoring_engine(group_name, target_cycle):
             for future in as_completed(future_to_url):
                 label, data, url, is_success = future.result()
                 if is_success:
+                    now_str = datetime.now(KST).strftime('%H:%M:%S')
+                    
+                    # 🚨 [수정] 새 상품 목록만 Lock으로 빠르게 읽어옴
                     with lock:
-                        now_str = datetime.now(KST).strftime('%H:%M:%S')
-                        my_state['last_time'] = now_str
                         new_items = set(data.keys()) - my_state['known']
-                        
-                        if cycle_count > 1 and new_items:
-                            alert_list = []
-                            for pid in new_items:
-                                name = data[pid]['name']
-                                stock_str = ""
-                                if pid.startswith('N_') and PROXY_IDS:
-                                    real_id = pid.replace("N_", "")
-                                    d_url = f"https://smartstore.naver.com/bandai/products/{real_id}"
-                                    try:
-                                        # 🚨 입고 스나이퍼 역시 차단 방지를 위해 프록시 우회
-                                        curr_id = random.choice(PROXY_IDS)
-                                        p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(d_url, safe='')
-                                        s_res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-                                        stock_match = re.search(r'"stockQuantity"\s*:\s*(\d+)', s_res.text)
-                                        if stock_match and int(stock_match.group(1)) > 0:
-                                            stock_str = f" [재고: {stock_match.group(1)}개]"
-                                    except: pass
-                                
-                                prefix = "[네반몰] " if pid.startswith('N_') else "[반몰] "
-                                alert_list.append(f"{prefix}{name}{stock_str}")
-                                
-                            for i in range(0, len(alert_list), 30): send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
-                        
+                    
+                    alert_list = []
+                    # 🚨 락(Lock) 없이 자유로운 상태에서 스나이퍼 통신 진행
+                    if cycle_count > 1 and new_items:
+                        for pid in new_items:
+                            name = data[pid]['name']
+                            stock_str = ""
+                            if pid.startswith('N_') and PROXY_IDS:
+                                real_id = pid.replace("N_", "")
+                                d_url = f"https://smartstore.naver.com/bandai/products/{real_id}"
+                                try:
+                                    curr_id = random.choice(PROXY_IDS)
+                                    p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(d_url, safe='')
+                                    s_res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                                    stock_match = re.search(r'"stockQuantity"\s*:\s*(\d+)', s_res.text)
+                                    if stock_match and int(stock_match.group(1)) > 0:
+                                        stock_str = f" [재고: {stock_match.group(1)}개]"
+                                except: pass
+                            
+                            prefix = "[네반몰] " if pid.startswith('N_') else "[반몰] "
+                            alert_list.append(f"{prefix}{name}{stock_str}")
+                            
+                        # 🚨 통신이 필요한 텔레그램 발송도 락 밖에서 진행
+                        for i in range(0, len(alert_list), 30): 
+                            send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
+                    
+                    # 🚨 다시 락을 쥐고 안전하게 메모리(상태) 저장
+                    with lock:
+                        my_state['last_time'] = now_str
                         my_state['known'].update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
                         for pid, info in data.items(): 
                             my_state['items'][pid] = {"name": info['name'], "url": url, "label": label, "stock": info.get('stock', '')}
 
+        # ❌ 품절 알림 역시 락과 통신을 완벽히 분리
+        gone_ids = []
         with lock:
             if cycle_count > 1:
                 gone_ids = [pid for pid in (my_state['known'] - current_cycle_ids) if my_state['items'].get(pid, {}).get('url') in success_urls]
-                if gone_ids:
-                    gone_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{my_state['items'][pid]['name']}" for pid in gone_ids]
-                    for i in range(0, len(gone_list), 30): send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
-                    for pid in gone_ids: my_state['known'].discard(pid); my_state['items'].pop(pid, None)
+        
+        if gone_ids:
+            gone_list = []
+            with lock:
+                for pid in gone_ids:
+                    prefix = "[네반몰] " if pid.startswith('N_') else "[반몰] "
+                    gone_list.append(f"{prefix}{my_state['items'][pid]['name']}")
+            
+            for i in range(0, len(gone_list), 30): 
+                send_message(f"❌ 품절 ({datetime.now(KST).strftime('%H:%M:%S')})\n" + "\n".join(gone_list[i:i+30]))
+            
+            with lock:
+                for pid in gone_ids: 
+                    my_state['known'].discard(pid)
+                    my_state['items'].pop(pid, None)
+
+        with lock:
             v_urls, v_labels = {t['url'] for t in tasks}, {t['label'] for t in tasks}
             for pid in list(my_state['known']):
                 info = my_state['items'].get(pid, {})
-                if info.get('url') not in v_urls or info.get('label') not in v_labels: my_state['known'].discard(pid); my_state['items'].pop(pid, None)
+                if info.get('url') not in v_urls or info.get('label') not in v_labels: 
+                    my_state['known'].discard(pid)
+                    my_state['items'].pop(pid, None)
             t_counts = {l: 0 for l in v_labels}
             for pid in my_state['known']:
                 lbl = my_state['items'].get(pid, {}).get('label')
@@ -313,7 +342,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.10_RESCUE] 안정화 완료.\n프록시 병목 해제 및 네이버 우회망 복구.")
+    send_message("🛡️ [V3.11_FLAWLESS] 가동 확인.\n데드락(먹통) 원천 차단 및 시스템 안정화 패치 완료.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
