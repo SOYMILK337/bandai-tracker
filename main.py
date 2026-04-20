@@ -7,13 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
 
-PROXY_IDS = [
-    "AKfycbwHH20V6XscVYYIek80dI0symQT3P3cnCZkqqCyGijhpjOkNNzbQsvUR5oNyU0ndUMR",
-    "AKfycbx57aFHKqx9QzC98TwPNLxDRs158W0Prnb8cZEjn5-n3udOlQ3CqKCgdIVt9at1UQ9X",
-    "AKfycbwUJTb02XOUbV-obvpE7WXRdDn9AxJl5H-KWb-kRxCVqQ3AJpkuBFokAoxwkhp_gWXB",
-    "AKfycbxVaQC2Y3ZUYFsls80Ny4aKZS_3zzbPxsNtZQnUUQOnulyfZQ5rf7n0uq29wYBVHpnMIw",
-    "AKfycby-qFnD922uw9WfCebRtSmVe_FhOPvmdP2m8X-xRLbuzK29Xx0oGGe18dv7-A4zBoir"
-]
+# 🚨 [보안 패치] 프록시 ID 노출 방지 로직 (GitHub Secrets 연동)
+proxy_secret_str = os.environ.get('PROXY_SECRET', '')
+PROXY_IDS = [p.strip() for p in proxy_secret_str.split(',')] if proxy_secret_str else []
 
 token = os.environ.get('TELEGRAM_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
@@ -91,8 +87,7 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.2_TRANSPARENT_STEALTH]\n"
-                            # 🚨 [개선] 순수 파싱에 걸린 시간(작업)과 전체 대기 시간을 합친(주기)를 투명하게 표기
+                            msg = f"📊 [V3.3_IRON_WALL]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱️ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱️ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
@@ -113,6 +108,7 @@ def scan_task(task):
     for _ in range(2):
         try:
             with lock:
+                if not PROXY_IDS: return label, {}, url, False # 🚨 금고가 비어있을 때의 에러 방지
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(busted_url, safe='')
             
@@ -230,7 +226,7 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.2_TRANSPARENT_STEALTH] 가동.\n타이머 투명성 확보 및 스텔스 캐시 무효화 패치 적용.")
+    send_message("🛡️ [V3.3_IRON_WALL] 무제한 무료 사냥 모드 돌입.\n보안과 성능이 모두 확보되었습니다.")
     t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
     t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
     t1.start(); t2.start()
