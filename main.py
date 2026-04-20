@@ -1,4 +1,4 @@
-import os, requests, time, re, json, html, urllib.parse, threading
+import os, requests, time, re, json, html, urllib.parse, threading, random
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -6,6 +6,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # 1. 시스템 설정
 ST_TIME = time.time() 
 KST = timezone(timedelta(hours=9))
+
+session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
+session.mount('https://', adapter)
 
 proxy_secret_str = os.environ.get('PROXY_SECRET', '')
 PROXY_IDS = [p.strip() for p in proxy_secret_str.split(',')] if proxy_secret_str else []
@@ -60,7 +64,7 @@ def check_commands():
     global last_update_id
     try:
         url = f"https://api.telegram.org/bot{token}/getUpdates"
-        res = requests.get(url, params={'offset': last_update_id + 1, 'timeout': 0.1}, timeout=1)
+        res = session.get(url, params={'offset': last_update_id + 1, 'timeout': 0.1}, timeout=1)
         response = res.json()
         if response.get("ok"):
             for update in response["result"]:
@@ -68,7 +72,6 @@ def check_commands():
                 if "message" in update and "text" in update["message"] and str(update["message"]["chat"]["id"]) == str(chat_id):
                     cmd = update["message"]["text"]
                     
-                    # 🚨 기존 /상태 명령어
                     if cmd == "/상태":
                         ordered_labels = []
                         try:
@@ -88,26 +91,46 @@ def check_commands():
                                     if l in merged_counts: merged_counts[l] += c
                                     else: merged_counts[l] = c
                                     
-                            msg = f"📊 [V3.6_SNIPER]\n"
+                            msg = f"📊 [V3.9_GHOST]\n"
                             msg += f"🔥 반몰: {group_state['반몰']['last_time']} (⏱ 작업 {group_state['반몰']['work_time']:.1f}s / 주기 {group_state['반몰']['cycle']:.1f}s)\n"
                             msg += f"🍀 네반몰: {group_state['네반몰']['last_time']} (⏱ 작업 {group_state['네반몰']['work_time']:.1f}s / 주기 {group_state['네반몰']['cycle']:.1f}s)\n\n"
                             msg += "\n".join([f"📍 {l}: {c}개" for l, c in merged_counts.items() if l in ordered_labels])
                             msg += f"\n\n📦 전체 추적: {total_known}개"
                         send_message(msg)
                         
-                    # 🚨 신규 탑재된 /네반몰재고 명령어
                     elif cmd == "/네반몰재고":
-                        with lock:
+                        send_message("🔍 [API 스나이퍼 모드] 네이버 상세 데이터망에 침투합니다.")
+                        def run_sniper():
+                            with lock:
+                                items_to_check = [(pid, info['name']) for pid, info in group_state["네반몰"]["items"].items()]
+                            
                             items_with_stock = []
-                            for pid, info in group_state["네반몰"]["items"].items():
-                                if info.get('stock') and str(info['stock']).isdigit():
-                                    items_with_stock.append(f"📍 {info['name']} [재고: {info['stock']}개]")
+                            def get_detail_stock(pid_info):
+                                pid, name = pid_info
+                                try:
+                                    real_id = pid.replace("N_", "")
+                                    d_url = f"https://smartstore.naver.com/bandai/products/{real_id}"
+                                    # 프록시 없이 다이렉트 API 타격
+                                    s_res = session.get(d_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=5)
+                                    stock_match = re.search(r'"stockQuantity"\s*:\s*(\d+)', s_res.text)
+                                    if stock_match:
+                                        stock_val = int(stock_match.group(1))
+                                        if stock_val > 0:
+                                            return f"📍 {name} [재고: {stock_val}개]"
+                                except: pass
+                                return None
+
+                            with ThreadPoolExecutor(max_workers=10) as executor:
+                                for result in executor.map(get_detail_stock, items_to_check):
+                                    if result: items_with_stock.append(result)
                             
                             if items_with_stock:
-                                msg = "📦 [네반몰 실시간 재고 파악 현황]\n\n" + "\n".join(items_with_stock)
+                                msg = "📦 [네반몰 API 정밀 타격 현황]\n\n" + "\n".join(items_with_stock)
                             else:
-                                msg = "📦 [네반몰 실시간 재고 파악 현황]\n\n현재 숫자로 파악된 재고가 없습니다.\n(품절 상태이거나, 아직 입고되지 않은 상품들입니다.)"
-                        send_message(msg)
+                                msg = "📦 [네반몰 API 정밀 타격 현황]\n\n현재 파악된 재고가 없습니다."
+                            send_message(msg)
+                            
+                        threading.Thread(target=run_sniper, daemon=True).start()
     except: pass
 
 proxy_index = 0
@@ -118,80 +141,54 @@ def scan_task(task):
     
     for _ in range(2):
         try:
+            data = {}
+            # 🚨 [V3.9 핵심] 네이버망 독립: 네이버는 프록시 총알을 쓰지 않고 직접 침투합니다.
+            if "naver.com" in url:
+                res = session.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=8)
+                if res.status_code != 200 or len(res.text) < 1500: raise Exception("Direct Blocked")
+                
+                clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+                soup = BeautifulSoup(clean_html, 'html.parser')
+                for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
+                    if '품절' in link.get_text(): continue
+                    p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
+                    name, stock_bk, attr = "", "", link.get('data-shp-contents-dtl')
+                    if attr:
+                        try:
+                            for item in json.loads(attr):
+                                if item.get('key') == 'chnl_prod_nm': name = str(item.get('value', ''))
+                        except: pass
+                    if not name: name = link.get_text(strip=True)
+                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower(): continue
+                    c_name = clean_product_name(name)
+                    if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
+                soup.decompose()
+                if data: return label, data, url, True
+                continue
+
+            # 반다이몰은 기존처럼 프록시 요원(우회망)을 통해 철벽을 뚫습니다.
             with lock:
                 if not PROXY_IDS: return label, {}, url, False 
                 curr_id = PROXY_IDS[proxy_index % len(PROXY_IDS)]; proxy_index += 1
             
             p_url = f"https://script.google.com/macros/s/{curr_id}/exec?url=" + urllib.parse.quote(url, safe='')
-            # 🚨 타임아웃을 8초로 단축하여 느린 프록시에 묶여 전체 작업이 지연되는 것을 방지
-            res = requests.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
+            res = session.get(p_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
             
-            if len(res.text) < 1500 or (("naver.com" in url) and ("naver" not in res.text.lower())): continue 
+            if len(res.text) < 1500: continue 
             
-            data = {}
-            
-            if "naver.com" in url:
-                parsed_naver_json = False
-                state_match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.+?\});\s*</script>', res.text)
-                if state_match:
-                    try:
-                        state_data = json.loads(state_match.group(1))
-                        def find_products(d):
-                            if isinstance(d, dict):
-                                if 'productNo' in d and 'name' in d and 'productStatusType' in d:
-                                    yield d
-                                for k, v in d.items(): yield from find_products(v)
-                            elif isinstance(d, list):
-                                for item in d: yield from find_products(item)
-                        
-                        for prod in find_products(state_data):
-                            p_id = "N_" + str(prod.get('productNo'))
-                            p_name = str(prod.get('name', ''))
-                            status = str(prod.get('productStatusType', ''))
-                            stock = str(prod.get('stockQuantity', ''))
-                            
-                            if status == "OUTOFSTOCK" or '품절' in p_name: continue
-                            if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
-                            
-                            c_name = clean_product_name(p_name)
-                            if len(c_name) >= 3: 
-                                data[p_id] = {"name": c_name, "stock": stock}
-                                parsed_naver_json = True
-                    except: pass
-                
-                if not parsed_naver_json:
-                    clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
-                    soup = BeautifulSoup(clean_html, 'html.parser')
-                    for link in soup.find_all('a', href=re.compile(r'/products/\d+')):
-                        if '품절' in link.get_text(): continue
-                        p_id = "N_" + link.get('href').split('/')[-1].split('?')[0]
-                        name, stock_bk, attr = "", "", link.get('data-shp-contents-dtl')
-                        if attr:
-                            try:
-                                for item in json.loads(attr):
-                                    if item.get('key') == 'chnl_prod_nm': name = str(item.get('value', ''))
-                                    if item.get('key') == 'stk_qty': stock_bk = str(item.get('value', ''))
-                            except: pass
-                        if not name: name = link.get_text(strip=True)
-                        if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in name.replace(" ", "").lower(): continue
-                        c_name = clean_product_name(name)
-                        if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": stock_bk}
-                    soup.decompose()
-
-            else:
-                clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
-                soup = BeautifulSoup(clean_html, 'html.parser')
-                for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
-                    txt = link.get_text(strip=True).lower()
-                    if any(x in txt for x in ['sold out', '예약종료', '품절']): continue
-                    href = link.get('href')
-                    p_id = ("B_" if 'gno=' in href else "PB_") + (href.split('gno=')[-1] if 'gno=' in href else href.split('pno=')[-1]).split('&')[0]
-                    name_tag = link.find('h5')
-                    p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
-                    if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
-                    c_name = clean_product_name(p_name)
-                    if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
-                soup.decompose()
+            clean_html = re.sub(r'<script.*?</script>', '', res.text, flags=re.DOTALL | re.IGNORECASE)
+            soup = BeautifulSoup(clean_html, 'html.parser')
+            for link in soup.find_all('a', href=re.compile(r'(gno|pno)=\d+')):
+                txt = link.get_text(strip=True).lower()
+                if any(x in txt for x in ['sold out', '예약종료', '품절']): continue
+                href = link.get('href')
+                p_id = ("B_" if 'gno=' in href else "PB_") + (href.split('gno=')[-1] if 'gno=' in href else href.split('pno=')[-1]).split('&')[0]
+                name_tag = link.find('h5')
+                p_name = name_tag.get_text(strip=True) if name_tag else link.get_text(strip=True)
+                if "mgsd" in label.replace(" ", "").lower() and "mgsd" not in p_name.replace(" ", "").lower(): continue
+                c_name = clean_product_name(p_name)
+                if len(c_name) >= 3: data[p_id] = {"name": c_name, "stock": ""}
+            soup.decompose()
 
             if not data: continue
             return label, data, url, True
@@ -231,7 +228,7 @@ def monitoring_engine(group_name, target_cycle):
         cycle_count += 1
         current_cycle_ids, success_urls = set(), set()
         
-        with ThreadPoolExecutor(max_workers=20) as executor:
+        with ThreadPoolExecutor(max_workers=50) as executor:
             future_to_url = {executor.submit(scan_task, t): t for t in tasks}
             for future in as_completed(future_to_url):
                 label, data, url, is_success = future.result()
@@ -240,16 +237,33 @@ def monitoring_engine(group_name, target_cycle):
                         now_str = datetime.now(KST).strftime('%H:%M:%S')
                         my_state['last_time'] = now_str
                         new_items = set(data.keys()) - my_state['known']
+                        
                         if cycle_count > 1 and new_items:
-                            alert_list = [f"{('[네반몰] ' if pid.startswith('N_') else '[반몰] ')}{data[pid]['name']}{(' [재고: '+data[pid]['stock']+'개]' if data[pid]['stock'] else '')}" for pid in new_items]
+                            alert_list = []
+                            for pid in new_items:
+                                name = data[pid]['name']
+                                stock_str = ""
+                                # 🚨 [V3.9 핵심] 신규/재입고 상품 등장 시, 알림 쏘기 직전 0.5초간 API 다이렉트 스나이핑
+                                if pid.startswith('N_'):
+                                    real_id = pid.replace("N_", "")
+                                    d_url = f"https://smartstore.naver.com/bandai/products/{real_id}"
+                                    try:
+                                        s_res = session.get(d_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
+                                        stock_match = re.search(r'"stockQuantity"\s*:\s*(\d+)', s_res.text)
+                                        if stock_match and int(stock_match.group(1)) > 0:
+                                            stock_str = f" [재고: {stock_match.group(1)}개]"
+                                    except: pass
+                                
+                                prefix = "[네반몰] " if pid.startswith('N_') else "[반몰] "
+                                alert_list.append(f"{prefix}{name}{stock_str}")
+                                
                             for i in range(0, len(alert_list), 30): send_message(f"🟢 입고 ({now_str})\n" + "\n".join(alert_list[i:i+30]))
+                        
                         my_state['known'].update(data.keys())
                         current_cycle_ids.update(data.keys())
                         success_urls.add(url)
-                        
-                        # 🚨 /네반몰재고 명령어를 위해 봇의 메모리에 stock 값을 확실히 저장
                         for pid, info in data.items(): 
-                            my_state['items'][pid] = {"name": info['name'], "url": url, "label": label, "stock": info.get('stock', '')}
+                            my_state['items'][pid] = {"name": info['name'], "url": url, "label": label}
 
         with lock:
             if cycle_count > 1:
@@ -275,8 +289,9 @@ def monitoring_engine(group_name, target_cycle):
         with lock: my_state['cycle'] = time.time() - cycle_start
 
 if __name__ == "__main__":
-    send_message("🛡️ [V3.6_SNIPER] 가동.\n네반몰 수동 재고 브리핑 기능(/네반몰재고) 및 스피드업 패치 완료.")
-    t1 = threading.Thread(target=monitoring_engine, args=("반몰", 18.2), daemon=True)
-    t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 18.2), daemon=True)
+    send_message("🛡️ [V3.9_GHOST] 가동.\n네이버망 독립 및 Auto-Sniper 탑재. 감시주기가 9.1초로 고속화됩니다.")
+    # 🚨 주기를 18.2초에서 9.1초로 절반 단축! (네이버망 독립으로 프록시 여유분 확보)
+    t1 = threading.Thread(target=monitoring_engine, args=("반몰", 9.1), daemon=True)
+    t2 = threading.Thread(target=monitoring_engine, args=("네반몰", 9.1), daemon=True)
     t1.start(); t2.start()
     while True: check_commands(); time.sleep(1)
